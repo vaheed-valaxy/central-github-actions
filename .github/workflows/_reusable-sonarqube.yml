@@ -1,0 +1,129 @@
+name: Reusable - CodeQL Analysis
+
+on:
+  workflow_call:
+    inputs:
+      service-name:
+        description: "Service Name"
+        required: true
+        type: string
+      
+      runner:
+        description: "Runner label"
+        required: false
+        type: string
+        default: ubuntu-latest
+        
+jobs:
+  Codeql-Analysis-Job:
+    name: CodeQL 
+    runs-on: ${{ inputs.runner }}
+    
+    permissions:
+      contents: read  
+      security-events: write
+      actions: read
+
+    steps:
+      # Checkout Source Code
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.24"
+
+      - name: Create CodeQL configuration
+        run: |
+          cat > codeql-config.yml <<EOF
+          name: Go CodeQL
+          paths:
+            - ${{ inputs.service-name }}
+          EOF
+
+      # Initialize CodeQL
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: go
+          queries: security-extended
+          build-mode: manual
+          config-file: codeql-config.yml
+
+      # Build GO Application automatically
+      # - name: Autobuild 
+      #   uses: github/codeql-action/autobuild@v4
+
+      # Update go.sum
+      - name: Update go.sum
+        run: go mod tidy
+       
+      # Download Go dependencies
+      - name: Download Go dependencies
+        # working-directory: ${{ inputs.service-name }}
+        run: go mod download
+
+      # Build Go Application
+      - name: Build Go App manually
+        # working-directory: ${{ inputs.service-name }}
+        run: go build ./...
+          
+      # Run CodeQL analysis (Uploads sarif report to Github Security Tab)
+      - name: Perform CodeQL Analysis 
+        uses: github/codeql-action/analyze@v4 
+        with: 
+          category: "/language:go"
+
+      # ------------------------------------------------
+      # ** Enforce CODEQL security policy **
+      # ------------------------------------------------
+      - name: Enforce CodeQL Security Policy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "Checking CodeQL security findings..."
+
+          alerts=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${REPO}/code-scanning/alerts" \
+            --paginate)
+
+          high=$(echo "$alerts" | jq '
+            [
+              .[]
+              | select(
+                  .state == "open"
+                  and
+                  .tool.name == "CodeQL"
+                  and
+                  (
+                    .rule.security_severity_level == "high"
+                    or
+                    .rule.security_severity_level == "critical"
+                  )
+              )
+            ]
+            | length
+          ')
+
+          echo "High/Critical CodeQL findings: $high"
+
+          if [ "$high" -gt 0 ]; then
+            echo "❌ High/Critical CodeQL vulnerabilities found."
+            exit 1
+          fi
+
+          echo "✅ No High/Critical CodeQL vulnerabilities found."
+
+          echo "High/Critical CodeQL findings: $high"
+
+          if [ "$high" -gt 0 ]; then
+            echo "❌ High/Critical CodeQL vulnerabilities found."
+            exit 1
+          fi
+
+          echo "✅ No High/Critical CodeQL vulnerabilities found."
