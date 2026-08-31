@@ -78,7 +78,7 @@ on:
 
 jobs:
   Build-Scan-Push-Image-Job:
-    name: Build Scan Push Image Job
+    name: Build Scan Push Image - ${{ inputs.service-name }}
     runs-on: ${{ inputs.runner }}
 
     permissions:
