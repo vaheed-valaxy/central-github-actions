@@ -1,4 +1,4 @@
-name: Reusable — GO PR Check (no Docker)
+name: Reusable — GO PR Check (no Docker)  
 
 on:
   workflow_call:
