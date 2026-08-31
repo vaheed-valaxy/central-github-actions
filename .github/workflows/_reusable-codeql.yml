@@ -16,7 +16,7 @@ on:
         
 jobs:
   Codeql-Analysis-Job:
-    name: CodeQL 
+    name: CodeQL Scan
     runs-on: ${{ inputs.runner }}
     
     permissions:
