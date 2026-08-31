@@ -116,6 +116,25 @@ jobs:
             TRIVY_SKIP_ARGS+=(--skip-files "$pattern")
       
           done <<< "${{ inputs.trivy-fs-skip-files }}"
+
+          # Build the complete command
+          TRIVY_CMD=(
+            trivy fs
+            --severity HIGH,CRITICAL
+            --exit-code 1
+            --format sarif
+            --output "trivy-${{ inputs.service-name }}.sarif"
+            "${TRIVY_SKIP_ARGS[@]}"
+            "${{ inputs.trivy-fs-scan-path }}"
+          )
+          
+          echo "========== TRIVY COMMAND =========="
+          printf '%q ' "${TRIVY_CMD[@]}"
+          echo
+          echo "==================================="
+
+          # Execute the exact same command
+          # "${TRIVY_CMD[@]}"
           
           trivy fs \
             --severity HIGH,CRITICAL \
