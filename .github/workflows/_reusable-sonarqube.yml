@@ -13,7 +13,16 @@ on:
         required: false
         type: string
         default: ubuntu-latest
+
+      sonar-host-url:
+        description: "Sonar Host URL"
+        required: true
+        type: string
         
+    secrets:
+      SONAR_TOKEN:
+        required: true
+            
 jobs:
   Codeql-Analysis-Job:
     name: CodeQL 
