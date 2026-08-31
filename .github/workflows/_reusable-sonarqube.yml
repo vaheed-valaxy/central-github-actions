@@ -25,7 +25,7 @@ on:
 
 jobs:
   Sonarqube:
-    name: Sast Sonarqube
+    name: SAST Sonarqube Scan
     runs-on: ${{ inputs.runner }}
 
     defaults:
