@@ -17,6 +17,12 @@ on:
         type: string
         default: ubuntu-latest
 
+      trivy-skip-files:
+        description: "Newline-separated files or glob patterns to skip"
+        required: false
+        type: string
+        default: ""
+
       # ======================================================
       # Trivy
       # ======================================================
@@ -98,14 +104,26 @@ jobs:
       - name: Trivy Filesystem Scan
         continue-on-error: true
         run: |
-          trivy fs \
-          --severity HIGH,CRITICAL \
-          --ignore-unfixed \
-          --format json \
-          --output trivy-fs-${{ inputs.service-name }}.json \
-          "${{ inputs.trivy-fs-scan-path }}"
+          set -euo pipefail
 
+          TRIVY_SKIP_ARGS=()
       
+          while IFS= read -r pattern; do
+            [[ -z "$pattern" ]] && continue
+      
+            echo "Trivy skip pattern: $pattern"
+      
+            TRIVY_SKIP_ARGS+=(--skip-files "$pattern")
+      
+          done <<< "${{ inputs.trivy-skip-files }}"
+          
+          trivy fs \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --format json \
+            --output trivy-fs-${{ inputs.service-name }}.json \
+            "${TRIVY_SKIP_ARGS[@]}" \
+            "${{ inputs.trivy-fs-scan-path }}"
 
       # ======================================================
       # Verify JSON
