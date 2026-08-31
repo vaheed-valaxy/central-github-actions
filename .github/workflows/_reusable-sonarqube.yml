@@ -7,17 +7,17 @@ on:
         description: "Service Name"
         required: true
         type: string
-      
-      sonar-host-url:
-        description: "Sonar Host Url"
-        required: true
-        type: string
 
       runner:
         description: "Runner label"
         required: false
         type: string
         default: ubuntu-latest
+      
+      sonar-host-url:
+        description: "Sonar Host Url"
+        required: true
+        type: string
     
     secrets:
       SONAR_TOKEN:
