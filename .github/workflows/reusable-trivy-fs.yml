@@ -17,7 +17,7 @@ on:
         type: string
         default: ubuntu-latest
 
-      trivy-skip-files:
+      trivy-fs-skip-files:
         description: "Newline-separated files or glob patterns to skip"
         required: false
         type: string
@@ -115,7 +115,7 @@ jobs:
       
             TRIVY_SKIP_ARGS+=(--skip-files "$pattern")
       
-          done <<< "${{ inputs.trivy-skip-files }}"
+          done <<< "${{ inputs.trivy-fs-skip-files }}"
           
           trivy fs \
             --severity HIGH,CRITICAL \
