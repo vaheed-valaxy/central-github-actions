@@ -14,18 +14,6 @@ on:
         type: string
         default: ubuntu-latest
 
-      sonarqube-scan:
-        description: "Enable SonarQube Scan"
-        required: false
-        type: boolean
-        default: false
-
-      sonar-host-url:
-        description: "Sonarqube Host Url"
-        required: false
-        type: string
-        default: ""
-
       gitleaks-scan:
         description: "Enable Gitleaks Scan"
         required: false
@@ -50,6 +38,17 @@ on:
         type: boolean
         default: false
         
+      sonarqube-scan:
+        description: "Enable SonarQube Scan"
+        required: false
+        type: boolean
+        default: false
+
+      sonar-host-url:
+        description: "Sonarqube Host Url"
+        required: false
+        type: string
+        default: ""
 
     secrets:
       SONAR_TOKEN:
