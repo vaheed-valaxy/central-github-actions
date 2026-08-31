@@ -1,0 +1,145 @@
+name: Reusable - ESLint
+
+on:
+  workflow_call:
+
+    inputs:
+
+      service-name:
+        description: "Service Name"
+        required: true
+        type: string
+
+      runner:
+        description: "Runner label"
+        required: false
+        type: string
+        default: ubuntu-latest
+
+      node-version:
+        description: "Node.js version"
+        required: false
+        type: string
+        default: "18"
+
+
+jobs:
+
+  ESLint-Job:
+    name: ESLint
+    runs-on: ${{ inputs.runner }}
+
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+
+      # ============================================================
+      # Checkout
+      # ============================================================
+
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+
+      # ============================================================
+      # Setup Node.js
+      # ============================================================
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+          
+                
+      # ============================================================
+      # Install Dependencies
+      # ============================================================
+
+      - name: Install frontend dependencies
+        run: npm install    # npm ci
+
+      # Check ESlint Version
+      - name: Check ESLint
+        run: |
+          echo "Node Version:"
+          node --version
+
+          echo "Npm Version:"
+          npm --version
+
+          echo "Eslint Version"
+          npx eslint --version
+          npm list eslint
+          npm list @microsoft/eslint-formatter-sarif
+        
+
+      # ============================================================
+      # ESLint Scan
+      # ============================================================
+
+      - name: Run ESLint
+        id: eslint
+        continue-on-error: true
+        run: |
+          npx eslint . \
+            --ext js,jsx \
+            --report-unused-disable-directives \
+            --max-warnings 0 \
+            --config .eslintrc.cjs \
+            --format @microsoft/eslint-formatter-sarif \
+            --output-file eslint-${{ inputs.service-name }}.sarif
+            
+
+      # ============================================================
+      # Check SARIF report exists and is not empty
+      # ============================================================
+      
+      - name: Check ESLint SARIF file
+        id: check-sarif
+        if: always()
+        run: |
+          SARIF_FILE="eslint-${{ inputs.service-name }}.sarif"
+
+          if [ -s "$SARIF_FILE" ]; then
+            echo "sarif_exists=true" >> "$GITHUB_OUTPUT"
+            echo "✅ SARIF file exists and is not empty."
+          else
+            echo "sarif_exists=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️ SARIF file does not exist or is empty."
+          fi
+
+
+      # ============================================================
+      # Upload ESLint Scan SARIF report to Github
+      # ============================================================
+      
+      - name: Upload ESLint SARIF
+        if: always() && steps.check-sarif.outputs.sarif_exists == 'true'
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: eslint-${{ inputs.service-name }}.sarif
+          category: eslint-${{ inputs.service-name }}
+          wait-for-processing: true
+      
+
+      # ============================================================
+      # Fail pipeline if ESLint failed
+      # ============================================================
+
+      - name: ESLint failed
+        if: steps.eslint.outcome == 'failure'
+        run: |
+          echo "❌ ESLint found errors."
+          exit 1
+
+      - name: ESLint passed
+        if: steps.eslint.outcome == 'success'
+        run: |
+          echo "✅ ESLint passed."
+
+          
