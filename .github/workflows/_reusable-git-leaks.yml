@@ -15,7 +15,7 @@ on:
         default: ubuntu-latest
 
 jobs:
-  gitleaks:
+  Gitleaks-Job:
     name: Gitleaks Scan
     runs-on: ${{ inputs.runner }}
 
