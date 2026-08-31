@@ -59,7 +59,6 @@ jobs:
   
   Gitleaks-Job:
     if: ${{ inputs.gitleaks-scan }}
-    # name: Gitleaks
     uses: ./.github/workflows/_reusable-gitleaks.yml
     with:
       service-name: ${{ inputs.service-name }} 
@@ -68,7 +67,6 @@ jobs:
 
   Sonarqube-Job:
     if: ${{ inputs.sonarqube-scan }}
-    name: Sonarqube
     uses: ./.github/workflows/_reusable-sonarqube.yml
     with:
       service-name: ${{ inputs.service-name }} 
@@ -80,7 +78,6 @@ jobs:
 
   Trivy-Fs-Scan-Job:
     if: ${{ inputs.trivy-fs-scan }}
-    name: Trivy Fs Scan
     uses: ./.github/workflows/_reusable-trivy-fs.yml
     with:
       service-name: ${{ inputs.service-name }}
@@ -89,7 +86,6 @@ jobs:
 
   Codeql-Analysis-Job:
     if: ${{ inputs.codeql-scan }}
-    name: Codeql Analysis
     uses: ./.github/workflows/_reusable-codeql.yml
     with:
       service-name: ${{ inputs.service-name }}
