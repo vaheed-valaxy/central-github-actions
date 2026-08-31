@@ -213,3 +213,35 @@ jobs:
         with:
           sarif_file: trivy-fs-${{ inputs.service-name }}.sarif
           category: trivy-fs-${{ inputs.service-name }}
+
+
+
+      # ========================  Skip files Trivy GH Actions  ============================== #
+      #  trivy-fs-skip-files:
+      #    description: "Comma-separated files/globs to skip"
+      #    required: false
+      #    type: string
+      #    default: ""
+
+      #     - name: Trivy FS Scan
+      #       uses: aquasecurity/trivy-action@v0.36.0
+      #       with:
+      #         scan-type: fs
+      #         scan-ref: ${{ inputs.trivy-fs-scan-path }}
+      #         severity: HIGH,CRITICAL
+      #         exit-code: '1'
+      #         format: sarif
+      #         output: trivy-${{ inputs.service-name }}.sarif
+      #         skip-files: '**/README.md,**/LICENSE,**/docs/**'
+
+      #  with:
+      #    trivy-fs-skip-files: '**/README.md,**/LICENSE,**/docs/**'
+
+
+
+
+
+
+
+
+      
