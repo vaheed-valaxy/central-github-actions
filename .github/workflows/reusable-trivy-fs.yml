@@ -186,7 +186,3 @@ jobs:
         with:
           sarif_file: trivy-fs-${{ inputs.service-name }}.sarif
           category: trivy-fs-${{ inputs.service-name }}
-
-
-
-      
