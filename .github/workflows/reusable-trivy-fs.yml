@@ -17,11 +17,6 @@ on:
         type: string
         default: ubuntu-latest
 
-      trivy-fs-skip-files:
-        description: "Newline-separated files or glob patterns to skip"
-        required: false
-        type: string
-        default: ""
 
       # ======================================================
       # Trivy
@@ -38,6 +33,12 @@ on:
         required: false
         type: string
         default: "."
+
+      trivy-fs-skip-files:
+        description: "Comma-separated files or glob patterns to skip"
+        required: false
+        type: string
+        default: ""
 
 jobs:
 
@@ -102,47 +103,19 @@ jobs:
       # ======================================================
 
       - name: Trivy Filesystem Scan
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-
-          TRIVY_SKIP_ARGS=()
-      
-          while IFS= read -r pattern; do
-            [[ -z "$pattern" ]] && continue
-      
-            echo "Trivy skip pattern: $pattern"
-      
-            TRIVY_SKIP_ARGS+=(--skip-files "$pattern")
-      
-          done <<< "${{ inputs.trivy-fs-skip-files }}"
-
-          # Build the complete command
-          TRIVY_CMD=(
-            trivy fs
-            --severity HIGH,CRITICAL
-            --exit-code 1
-            --format sarif
-            --output "trivy-${{ inputs.service-name }}.sarif"
-            "${TRIVY_SKIP_ARGS[@]}"
-            "${{ inputs.trivy-fs-scan-path }}"
-          )
-          
-          echo "========== TRIVY COMMAND =========="
-          printf '%q ' "${TRIVY_CMD[@]}"
-          echo
-          echo "==================================="
-
-          # Execute the exact same command
-          # "${TRIVY_CMD[@]}"
-          
-          trivy fs \
-            --severity HIGH,CRITICAL \
-            --ignore-unfixed \
-            --format json \
-            --output trivy-fs-${{ inputs.service-name }}.json \
-            "${TRIVY_SKIP_ARGS[@]}" \
-            "${{ inputs.trivy-fs-scan-path }}"
+        # continue-on-error: true      
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          # version: ${{ inputs.trivy-version }} 
+          skip-setup-trivy: true
+          scan-type: fs
+          scan-ref: ${{ inputs.trivy-fs-scan-path}}
+          format: json
+          output: trivy-fs-${{ inputs.service-name }}.json 
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          skip-files: ${{ inputs.trivy-fs-skip-files }}  # '**/README.md,**/LICENSE,**/docs/**'
+          exit-code: '0'
 
       # ======================================================
       # Verify JSON
@@ -154,10 +127,10 @@ jobs:
           echo "Checking JSON file..."
 
           if [ -f "trivy-fs-${{ inputs.service-name }}.json" ]; then
-            echo "JSON file exists"
+            echo "JSON file exists: trivy-fs-${{ inputs.service-name }}.json"
             ls -lh "trivy-fs-${{ inputs.service-name }}.json"
           else
-            echo "ERROR: JSON file was not generated"
+            echo "ERROR: trivy-fs-${{ inputs.service-name }}.json JSON file was not generated"
             exit 1
           fi
 
@@ -213,52 +186,6 @@ jobs:
         with:
           sarif_file: trivy-fs-${{ inputs.service-name }}.sarif
           category: trivy-fs-${{ inputs.service-name }}
-
-
-
-      # ========================  Skip files Trivy GH Actions  ============================== #
-      #  trivy-fs-skip-files:
-      #    description: "Comma-separated files/globs to skip"
-      #    required: false
-      #    type: string
-      #    default: ""
-
-      #     - name: Trivy FS Scan
-      #       uses: aquasecurity/trivy-action@v0.36.0
-      #       with:
-      #         scan-type: fs
-      #         scan-ref: ${{ inputs.trivy-fs-scan-path }}
-      #         severity: HIGH,CRITICAL
-      #         exit-code: '1'
-      #         format: sarif
-      #         output: trivy-${{ inputs.service-name }}.sarif
-      #         skip-files: '**/README.md,**/LICENSE,**/docs/**'
-
-      #  with:
-      #    trivy-fs-skip-files: '**/README.md,**/LICENSE,**/docs/**'
-
-
-# - name: Verify Trivy
-#   run: |
-#     which trivy
-#     trivy --version
-
-# - name: Trivy FS Scan
-#   uses: aquasecurity/trivy-action@v0.36.0
-#   with:
-#     version: v0.72.0
-#     skip-setup-trivy: true
-#     scan-type: fs
-#     scan-ref: .
-#     format: sarif
-#     output: trivy-results.sarif
-#     severity: HIGH,CRITICAL
-#     exit-code: '1'
-
-
-
-
-
 
 
 
