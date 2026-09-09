@@ -167,5 +167,5 @@ jobs:
         run: |
           conftest test \
             "${{ inputs.dockerfile }}" \
-            --policy "${{ inputs.opa-policy }} \"
+            --policy "${{ inputs.opa-policy }}" \
             --rego-version v0
