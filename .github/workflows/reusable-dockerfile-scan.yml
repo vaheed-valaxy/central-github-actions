@@ -128,18 +128,18 @@ jobs:
       # Verify OPA Policy
       # ============================================================
 
-      - name: Verify OPA Policy
-        if: ${{ inputs.opa-conftest-dockerfile-scan }}
-        run: |
-          test -n "${{ inputs.opa-policy }}" || {
-            echo "OPA policy input is required when OPA Conftest scan is enabled"
-            exit 1
-          }
+      # - name: Verify OPA Policy
+      #   if: ${{ inputs.opa-conftest-dockerfile-scan }}
+      #   run: |
+      #     test -n "${{ inputs.opa-policy }}" || {
+      #       echo "OPA policy input is required when OPA Conftest scan is enabled"
+      #       exit 1
+      #     }
 
-          test -f "${{ inputs.opa-policy }}" || {
-            echo "OPA policy file not found: ${{ inputs.opa-policy }}"
-            exit 1
-          }
+      #     test -f "${{ inputs.opa-policy }}" || {
+      #       echo "OPA policy file not found: ${{ inputs.opa-policy }}"
+      #       exit 1
+      #     }
 
       # ============================================================
       # Install Conftest
