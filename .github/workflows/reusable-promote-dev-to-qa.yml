@@ -1,4 +1,4 @@
-name: Promote to QA
+name: Reusable Promote to QA
 
 # Promotes the image digest currently defined for DEV in GitOps
 # to the QA ECR repository and opens a QA GitOps PR.
@@ -7,17 +7,18 @@ name: Promote to QA
 #
 # Flow:
 #
-# DEV GitOps digest
-#       ↓
-# Verify DEV ECR
-#       ↓
-# Copy exact digest DEV → QA
-#       ↓
-# Verify QA digest == DEV digest
-#       ↓
-# Update QA GitOps values
-#       ↓
-# Open QA promotion PR
+# 1. Checkout GitOps
+# 2. Read DEV digest
+# 3. Validate digest
+# 4. Verify DEV ECR
+# 5. Find SHA tag
+# 6. Copy exact digest DEV → QA
+# 7. Verify QA digest == DEV digest
+# 8. Update QA values
+# 9. Create branch
+# 10. Commit
+# 11. Push
+# 12. Open QA PR
 #
 # QA Argo CD will deploy the image after the PR is merged.
 
@@ -74,6 +75,7 @@ env:
 
   GITOPS_OWNER: ${{ inputs.gitops-owner }}
   GITOPS_REPO: ${{ inputs.gitops-repo }}
+  GITOPS_DIR: "_gitops"
 
   DEV_REPO: ${{ inputs.dev-repo }}
   QA_REPO: ${{ inputs.qa-repo }}
@@ -89,7 +91,7 @@ jobs:
   Promote-Dev-to-QA-Job:
     name: Promote DEV image to QA
     runs-on: ubuntu-latest
-    steps:
+    steps:          
       # ============================================================
       # 1. Checkout GitOps Repository
       # ============================================================
@@ -98,16 +100,22 @@ jobs:
         with:
           repository: ${{ inputs.gitops-owner }}/${{ inputs.gitops-repo }}
           token: ${{ secrets.GITOPS_TOKEN }}
+          path: ${{ env.GITOPS_DIR }}
           fetch-depth: 0
 
-
       # ============================================================
-      # 2. Configure Git
+      # 2. Set File Paths
       # ============================================================
-      - name: Configure Git
+      - name: Set GitOps file paths
+        shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          set -euo pipefail
+      
+          DEV_VALUES_FILE="${GITOPS_DIR}/envs/dev/values-${SERVICE}.yaml"
+          QA_VALUES_FILE="${GITOPS_DIR}/envs/qa/values-${SERVICE}.yaml"
+      
+          echo "DEV_VALUES_FILE=$DEV_VALUES_FILE" >> "$GITHUB_ENV"
+          echo "QA_VALUES_FILE=$QA_VALUES_FILE" >> "$GITHUB_ENV"
 
 
       # ============================================================
@@ -134,8 +142,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          DEV_VALUES_FILE="envs/dev/values-${SERVICE}.yaml"
-
           if [[ ! -f "$DEV_VALUES_FILE" ]]; then
             echo "::error::DEV values file not found: $DEV_VALUES_FILE"
             echo "::error::Cannot determine DEV image digest."
@@ -156,7 +162,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          QA_VALUES_FILE="envs/qa/values-${SERVICE}.yaml"
+          
 
           if [[ ! -f "$QA_VALUES_FILE" ]]; then
             echo "::error::QA values file not found: $QA_VALUES_FILE"
@@ -434,6 +440,7 @@ jobs:
       # 16. Create QA promotion branch
       # ============================================================
       - name: Create QA promotion branch
+        working-directory: ${{ env.GITOPS_DIR }}
         id: branch
         shell: bash
         env:
@@ -479,6 +486,7 @@ jobs:
       # 18. Show Git diff
       # ============================================================
       - name: Show Git diff
+        working-directory: ${{ env.GITOPS_DIR }}
         shell: bash
         run: |
           set -euo pipefail
@@ -499,13 +507,17 @@ jobs:
       # 19. Commit QA promotion
       # ============================================================
       - name: Commit QA promotion
+        working-directory: ${{ env.GITOPS_DIR }}
         shell: bash
         env:
           DEV_IMAGE_TAG: ${{ steps.image-info.outputs.dev-image-tag }}
 
         run: |
           set -euo pipefail
-
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
           git add "$QA_VALUES_FILE"
 
           git commit \
@@ -518,6 +530,7 @@ jobs:
       # 20. Push promotion branch
       # ============================================================
       - name: Push QA promotion branch
+        working-directory: ${{ env.GITOPS_DIR }}
         shell: bash
         env:
           BRANCH: ${{ steps.branch.outputs.branch }}
