@@ -21,12 +21,12 @@ name: Reusable Promote to QA
 # 12. Login Crane
 # 13. Promote DEV → QA
 # 14. Verify QA digest
-# 15. Create GitOps branch
+# 15. Create or reuse GitOps branch
 # 16. Update QA values
 # 17. Git diff
 # 18. Commit
 # 19. Push
-# 20. Create PR
+# 20. Create or reuse QA PR
 #
 # QA Argo CD will deploy the image after the PR is merged.
 
@@ -464,7 +464,7 @@ jobs:
           echo "DEV and QA contain the exact same image digest."
 
       # ============================================================
-      # 15. Create QA promotion branch
+      # 15. Create or reuse QA promotion branch
       # ============================================================
       - name: Create QA promotion branch
         working-directory: ${{ env.GITOPS_DIR }}
@@ -478,12 +478,32 @@ jobs:
 
           BRANCH="promote/${SERVICE}-dev-to-qa-${DEV_IMAGE_TAG}"
 
+          echo "Promotion branch:"
+          echo "$BRANCH"
+
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
-          git checkout -b "$BRANCH"
+          # Check whether the branch already exists on origin.
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+      
+            echo "Branch already exists on origin."
+            echo "Fetching existing branch..."
+      
+            git fetch origin "$BRANCH"
+      
+            git checkout -B "$BRANCH" "origin/$BRANCH"
+      
+          else
+      
+            echo "Branch does not exist."
+            echo "Creating new branch..."
+      
+            git checkout -b "$BRANCH"
 
-          echo "Created branch:"
-          echo "$BRANCH"
+            echo "Created branch:"
+            echo "$BRANCH"
+      
+          fi
 
       # ============================================================
       # 16. Update QA values
@@ -583,9 +603,27 @@ jobs:
           set -euo pipefail
 
           echo "=================================================="
-          echo "Creating QA promotion PR"
+          echo "Creating/Checking QA promotion PR"
           echo "=================================================="
+          
+          EXISTING_PR="$(gh pr list \
+            --repo "${GITOPS_OWNER}/${GITOPS_REPO}" \
+            --head "$BRANCH" \
+            --base main \
+            --state open \
+            --json number,url \
+            --jq '.[0] | "\(.number) \(.url)"')"
 
+          if [[ -n "$EXISTING_PR" ]]; then
+            echo "QA promotion PR already exists:"
+            echo "$EXISTING_PR"
+            echo "Nothing more to create."
+            exit 0
+          fi
+          
+          echo "No existing QA promotion PR found."
+          echo "Creating PR..."
+    
           PR_TITLE="promote(${SERVICE}): DEV → QA"
 
           PR_BODY="$(cat <<EOF
