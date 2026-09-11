@@ -334,10 +334,13 @@ jobs:
       # ============================================================
       # 13. Promote exact digest DEV → QA
       # ============================================================
-      # This step is for safety fall back, if the workflow fails after copying the image DIGEST to QA,
-      # the next run will fail saying image is already in QA,
-      # so, this step reads existing QA DIGEST from ECR and check whether it is aleady there,
-      # if not it will copy the DIGEST to QA
+      # This step is rerun-safe:
+      #
+      # - If the QA tag does not exist, copy the exact DEV digest.
+      # - If the QA tag already exists with the same digest, continue.
+      # - If the QA tag exists with a different digest, fail.
+      #
+      # This prevents accidental replacement of an existing QA tag.
       
       - name: Promote exact image digest
         shell: bash
