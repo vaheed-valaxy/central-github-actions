@@ -86,6 +86,9 @@ env:
   CRANE_VERSION: v0.21.7
   YQ_VERSION: "v4.47.1"
 
+  DEV_VALUES_FILE: "envs/dev/values-${{ inputs.service-name }}.yaml"
+  QA_VALUES_FILE: "envs/qa/values-${{ inputs.service-name }}.yaml"
+
 jobs:
 
   Promote-Dev-to-QA-Job:
@@ -103,23 +106,9 @@ jobs:
           path: ${{ env.GITOPS_DIR }}
           fetch-depth: 0
 
-      # ============================================================
-      # 2. Set File Paths
-      # ============================================================
-      - name: Set GitOps file paths
-        shell: bash
-        run: |
-          set -euo pipefail
-      
-          DEV_VALUES_FILE="${GITOPS_DIR}/envs/dev/values-${SERVICE}.yaml"
-          QA_VALUES_FILE="${GITOPS_DIR}/envs/qa/values-${SERVICE}.yaml"
-      
-          echo "DEV_VALUES_FILE=$DEV_VALUES_FILE" >> "$GITHUB_ENV"
-          echo "QA_VALUES_FILE=$QA_VALUES_FILE" >> "$GITHUB_ENV"
-
 
       # ============================================================
-      # 3. Install yq
+      # 2. Install yq
       # ============================================================
       - name: Install yq
         shell: bash
@@ -135,51 +124,44 @@ jobs:
 
 
       # ============================================================
-      # 4. Ensure DEV Values file exists
+      # 3. Ensure DEV Values file exists
       # ============================================================
       - name: Ensure DEV values file exists
+        working-directory: ${{ env.GITOPS_DIR }}
         shell: bash
         run: |
           set -euo pipefail
 
           if [[ ! -f "$DEV_VALUES_FILE" ]]; then
-            echo "::error::DEV values file not found: $DEV_VALUES_FILE"
+            echo "::error::DEV values file not found: ${GITOPS_DIR}/${DEV_VALUES_FILE}"
             echo "::error::Cannot determine DEV image digest."
             exit 1
           fi
 
-          echo "DEV_VALUES_FILE=$DEV_VALUES_FILE" >> "$GITHUB_ENV"
-
-          echo "DEV values file:"
-          echo "$DEV_VALUES_FILE"
 
 
       # ============================================================
-      # 5. Ensure QA Values file exists
+      # 4. Ensure QA Values file exists
       # ============================================================
       - name: Ensure QA values file exists
+        working-directory: ${{ env.GITOPS_DIR }}
         shell: bash
         run: |
           set -euo pipefail
 
           
-
           if [[ ! -f "$QA_VALUES_FILE" ]]; then
-            echo "::error::QA values file not found: $QA_VALUES_FILE"
+            echo "::error::QA values file not found: ${GITOPS_DIR}/${QA_VALUES_FILE}"
             echo "::error::Create $QA_VALUES_FILE in $GITOPS_REPO."
             exit 1
           fi
 
-          echo "QA_VALUES_FILE=$QA_VALUES_FILE" >> "$GITHUB_ENV"
-
-          echo "QA values file:"
-          echo "$QA_VALUES_FILE"
-
 
       # ============================================================
-      # 6. Read Image DIGEST from DEV
+      # 5. Read Image DIGEST from DEV
       # ============================================================
       - name: Read image DIGEST from DEV
+        working-directory: ${{ env.GITOPS_DIR }}
         shell: bash
         run: |
           set -euo pipefail
@@ -197,11 +179,11 @@ jobs:
           echo "DEV image information"
           echo "=================================================="
           echo "Service : $SERVICE"
-          echo "Digest  : $DEV_IMAGE_DIGEST"
+          echo "Dev Image Digest  : $DEV_IMAGE_DIGEST"
 
 
       # ============================================================
-      # 7. Validate DEV Image DIGEST
+      # 6. Validate DEV Image DIGEST
       # ============================================================
       - name: Validate image digest
         shell: bash
@@ -223,7 +205,7 @@ jobs:
 
 
       # ============================================================
-      # 8. Configure AWS using GitHub OIDC
+      # 7. Configure AWS using GitHub OIDC
       # ============================================================
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -233,7 +215,7 @@ jobs:
 
 
       # ============================================================
-      # 9. Get AWS Account ID
+      # 8. Get AWS Account ID
       # ============================================================
       - name: Get AWS account ID
         id: aws-account
@@ -251,7 +233,7 @@ jobs:
 
 
       # ============================================================
-      # 10. Verify DEV image exists in ECR
+      # 9. Verify DEV image exists in ECR
       # ============================================================
       - name: Verify DEV image exists in ECR
         shell: bash
@@ -274,7 +256,7 @@ jobs:
 
 
       # ============================================================
-      # 11. Find the original SHA tag from DEV
+      # 10. Find the original SHA tag from DEV
       # ============================================================
       - name: Find DEV image tag
         id: image-info
@@ -302,6 +284,10 @@ jobs:
           echo "dev-image-tag=$DEV_IMAGE_TAG" >> "$GITHUB_OUTPUT"
 
           echo ""
+          echo "Selected DEV Image:"
+          echo "$SERVICE"
+
+          echo ""
           echo "Selected DEV image tag:"
           echo "$DEV_IMAGE_TAG"
 
@@ -311,7 +297,7 @@ jobs:
 
 
       # ============================================================
-      # 12. Install Crane
+      # 11. Install Crane
       # ============================================================
       - name: Install Crane
         shell: bash
@@ -336,7 +322,7 @@ jobs:
 
 
       # ============================================================
-      # 13. Login Crane to ECR
+      # 12. Login Crane to ECR
       # ============================================================
       - name: Login Crane to ECR
         shell: bash
@@ -359,14 +345,18 @@ jobs:
 
 
       # ============================================================
-      # 14. Promote exact digest DEV → QA
+      # 13. Promote exact digest DEV → QA
       # ============================================================
+      # This step is for safety fall back, if the workflow fails after copying the image DIGEST to QA,
+      # the next run will fail saying image is already in QA,
+      # so, this step reads existing QA DIGEST from ECR and check whether it is aleady there,
+      # if not it will copy the DIGEST to QA
+      
       - name: Promote exact image digest
         shell: bash
         env:
           ACCOUNT_ID: ${{ steps.aws-account.outputs.account-id }}
           DEV_IMAGE_TAG: ${{ steps.image-info.outputs.dev-image-tag }}
-
         run: |
           set -euo pipefail
 
@@ -386,18 +376,43 @@ jobs:
           echo "TARGET:"
           echo "$TARGET"
 
-          echo ""
-          echo "No rebuild will occur."
-          echo "The exact DEV digest will be promoted."
+          EXISTING_QA_DIGEST="$(aws ecr describe-images \
+            --repository-name "$QA_REPO" \
+            --image-ids imageTag="$DEV_IMAGE_TAG" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text \
+            --region "$AWS_REGION" 2>/dev/null || true)"
 
-          crane copy \
-            --no-clobber \
-            "$SOURCE" \
-            "$TARGET"
+          if [[ -n "$EXISTING_QA_DIGEST" && "$EXISTING_QA_DIGEST" != "None" ]]; then
+
+            echo "QA tag already exists."
+            echo "Existing QA digest:"
+            echo "$EXISTING_QA_DIGEST"
+
+            if [[ "$EXISTING_QA_DIGEST" != "$DEV_IMAGE_DIGEST" ]]; then
+              echo "::error::QA tag exists but points to a different digest."
+              exit 1
+            fi
+
+            echo "QA already contains the exact same digest."
+            echo "Promotion is already complete."
+
+          else
+
+            echo "QA tag does not exist."
+            echo "Copying exact DEV digest to QA..."
+
+            crane copy \
+              "$SOURCE" \
+              "$TARGET"
+
+            echo "Image promotion completed."
+
+          fi
 
 
       # ============================================================
-      # 15. Verify QA digest matches DEV digest
+      # 14. Verify QA digest matches DEV digest
       # ============================================================
       - name: Verify QA digest matches DEV digest
         shell: bash
@@ -437,7 +452,7 @@ jobs:
 
 
       # ============================================================
-      # 16. Create QA promotion branch
+      # 15. Create QA promotion branch
       # ============================================================
       - name: Create QA promotion branch
         working-directory: ${{ env.GITOPS_DIR }}
@@ -460,9 +475,10 @@ jobs:
 
 
       # ============================================================
-      # 17. Update QA values
+      # 16. Update QA values
       # ============================================================
       - name: Update QA image digest
+        working-directory: ${{ env.GITOPS_DIR }}
         shell: bash
         run: |
           set -euo pipefail
@@ -483,7 +499,7 @@ jobs:
 
 
       # ============================================================
-      # 18. Show Git diff
+      # 17. Show Git diff
       # ============================================================
       - name: Show Git diff
         working-directory: ${{ env.GITOPS_DIR }}
@@ -504,7 +520,7 @@ jobs:
 
 
       # ============================================================
-      # 19. Commit QA promotion
+      # 18. Commit QA promotion
       # ============================================================
       - name: Commit QA promotion
         working-directory: ${{ env.GITOPS_DIR }}
@@ -527,7 +543,7 @@ jobs:
 
 
       # ============================================================
-      # 20. Push promotion branch
+      # 19. Push promotion branch
       # ============================================================
       - name: Push QA promotion branch
         working-directory: ${{ env.GITOPS_DIR }}
@@ -547,7 +563,7 @@ jobs:
 
 
       # ============================================================
-      # 21. Create QA promotion PR
+      # 20. Create QA promotion PR
       # ============================================================
       - name: Create QA promotion PR
         shell: bash
