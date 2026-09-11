@@ -7,18 +7,26 @@ name: Reusable Promote to QA
 #
 # Flow:
 #
-# 1. Checkout GitOps
-# 2. Read DEV digest
-# 3. Validate digest
-# 4. Verify DEV ECR
-# 5. Find SHA tag
-# 6. Copy exact digest DEV → QA
-# 7. Verify QA digest == DEV digest
-# 8. Update QA values
-# 9. Create branch
-# 10. Commit
-# 11. Push
-# 12. Open QA PR
+# 1. Checkout GitOps into _gitops
+# 2. Install yq
+# 3. Check DEV values
+# 4. Check QA values
+# 5. Read DEV digest
+# 6. Validate digest
+# 7. AWS OIDC
+# 8. Get AWS account
+# 9. Verify DEV ECR
+# 10. Find DEV SHA tag
+# 11. Install Crane
+# 12. Login Crane
+# 13. Promote DEV → QA
+# 14. Verify QA digest
+# 15. Create GitOps branch
+# 16. Update QA values
+# 17. Git diff
+# 18. Commit
+# 19. Push
+# 20. Create PR
 #
 # QA Argo CD will deploy the image after the PR is merged.
 
@@ -334,13 +342,16 @@ jobs:
       # ============================================================
       # 13. Promote exact digest DEV → QA
       # ============================================================
-      # This step is rerun-safe:
+      # Rerun-safe behavior:
       #
-      # - If the QA tag does not exist, copy the exact DEV digest.
-      # - If the QA tag already exists with the same digest, continue.
-      # - If the QA tag exists with a different digest, fail.
+      # - QA tag does not exist:
+      #     Copy exact DEV digest to QA.
       #
-      # This prevents accidental replacement of an existing QA tag.
+      # - QA tag exists with same digest:
+      #     Promotion already completed; continue.
+      #
+      # - QA tag exists with different digest:
+      #     Fail to prevent tag collision.
       
       - name: Promote exact image digest
         shell: bash
