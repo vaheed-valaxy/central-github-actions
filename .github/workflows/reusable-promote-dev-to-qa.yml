@@ -49,12 +49,12 @@ on:
         required: true
         type: string
 
-      dev-repo:
+      dev-ecr-repo:
         description: "DEV ECR repository"
         required: true
         type: string
 
-      qa-repo:
+      qa-ecr-repo:
         description: "QA ECR repository"
         required: true
         type: string
@@ -85,8 +85,8 @@ env:
   GITOPS_REPO: ${{ inputs.gitops-repo }}
   GITOPS_DIR: "_gitops"
 
-  DEV_REPO: ${{ inputs.dev-repo }}
-  QA_REPO: ${{ inputs.qa-repo }}
+  DEV_ECR_REPO: ${{ inputs.dev-ecr-repo }}
+  QA_ECR_REPO: ${{ inputs.qa-ecr-repo }}
 
   AWS_REGION: ${{ inputs.aws-region }}
   AWS_ECR_QA_PROMOTION_ROLE_ARN: ${{ inputs.aws-ecr-qa-promotion-role-arn }}
@@ -143,7 +143,7 @@ jobs:
           set -euo pipefail
 
           if [[ ! -f "$DEV_VALUES_FILE" ]]; then
-            echo "::error::DEV values file not found: ${GITOPS_DIR}/${DEV_VALUES_FILE}"
+            echo "::error::DEV values file not found: ${DEV_VALUES_FILE}"
             echo "::error::Cannot determine DEV image digest."
             exit 1
           fi
@@ -157,9 +157,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          
           if [[ ! -f "$QA_VALUES_FILE" ]]; then
-            echo "::error::QA values file not found: ${GITOPS_DIR}/${QA_VALUES_FILE}"
+            echo "::error::QA values file not found: ${QA_VALUES_FILE}"
             echo "::error::Create $QA_VALUES_FILE in $GITOPS_REPO."
             exit 1
           fi
@@ -248,13 +247,13 @@ jobs:
           echo "=================================================="
 
           aws ecr describe-images \
-            --repository-name "$DEV_REPO" \
+            --repository-name "$DEV_ECR_REPO" \
             --image-ids imageDigest="$DEV_IMAGE_DIGEST" \
             --region "$AWS_REGION" \
             >/dev/null
 
           echo "DEV image exists."
-          echo "Repository: $DEV_REPO"
+          echo "Repository: $DEV_ECR_REPO"
           echo "Digest:     $DEV_IMAGE_DIGEST"
 
       # ============================================================
@@ -267,7 +266,7 @@ jobs:
           set -euo pipefail
 
           TAGS="$(aws ecr describe-images \
-            --repository-name "$DEV_REPO" \
+            --repository-name "$DEV_ECR_REPO" \
             --image-ids imageDigest="$DEV_IMAGE_DIGEST" \
             --query 'imageDetails[0].imageTags' \
             --output text \
@@ -367,8 +366,8 @@ jobs:
       
           REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
       
-          SOURCE="${REGISTRY}/${DEV_REPO}@${DEV_IMAGE_DIGEST}"
-          TARGET="${REGISTRY}/${QA_REPO}:${DEV_IMAGE_TAG}"
+          SOURCE="${REGISTRY}/${DEV_ECR_REPO}@${DEV_IMAGE_DIGEST}"
+          TARGET="${REGISTRY}/${QA_ECR_REPO}:${DEV_IMAGE_TAG}"
       
           echo "=================================================="
           echo "Promoting image"
@@ -383,12 +382,14 @@ jobs:
       
           set +e
           QA_LOOKUP="$(aws ecr describe-images \
-            --repository-name "$QA_REPO" \
+            --repository-name "$QA_ECR_REPO" \
             --image-ids imageTag="$DEV_IMAGE_TAG" \
             --query 'imageDetails[0].imageDigest' \
             --output text \
             --region "$AWS_REGION" 2>&1)"
+            
           QA_LOOKUP_EXIT_CODE=$?
+          
           set -e
       
           if [[ "$QA_LOOKUP_EXIT_CODE" -eq 0 ]]; then
@@ -444,7 +445,7 @@ jobs:
           echo "=================================================="
 
           QA_DIGEST="$(aws ecr describe-images \
-            --repository-name "$QA_REPO" \
+            --repository-name "$QA_ECR_REPO" \
             --image-ids imageTag="$DEV_IMAGE_TAG" \
             --query 'imageDetails[0].imageDigest' \
             --output text \
@@ -569,8 +570,7 @@ jobs:
           
           git add "$QA_VALUES_FILE"
 
-          git commit \
-            -m "promote(${SERVICE}): DEV to QA ${DEV_IMAGE_TAG}"
+          git commit -m "promote(${SERVICE}): DEV to QA ${DEV_IMAGE_TAG}"
 
           echo "QA promotion commit created."
 
@@ -586,10 +586,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          git push \
-            --set-upstream \
-            origin \
-            "$BRANCH"
+          git push --set-upstream origin "$BRANCH"
 
           echo "QA promotion branch pushed."
 
@@ -635,9 +632,9 @@ jobs:
 
           Service: \`${SERVICE}\`
 
-          DEV repository: \`${DEV_REPO}\`
+          DEV repository: \`${DEV_ECR_REPO}\`
 
-          QA repository: \`${QA_REPO}\`
+          QA repository: \`${QA_ECR_REPO}\`
 
           Image tag: \`${DEV_IMAGE_TAG}\`
 
