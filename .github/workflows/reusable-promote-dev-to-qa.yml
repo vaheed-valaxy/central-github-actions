@@ -97,6 +97,10 @@ env:
   DEV_VALUES_FILE: "envs/dev/values-${{ inputs.service-name }}.yaml"
   QA_VALUES_FILE: "envs/qa/values-${{ inputs.service-name }}.yaml"
 
+concurrency:
+  group: promote-dev-to-qa-${{ inputs.service-name }}
+  cancel-in-progress: false
+  
 jobs:
 
   Promote-Dev-to-QA-Job:
