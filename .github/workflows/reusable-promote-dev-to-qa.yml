@@ -360,57 +360,70 @@ jobs:
           DEV_IMAGE_TAG: ${{ steps.image-info.outputs.dev-image-tag }}
         run: |
           set -euo pipefail
-
+      
           REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-
+      
           SOURCE="${REGISTRY}/${DEV_REPO}@${DEV_IMAGE_DIGEST}"
           TARGET="${REGISTRY}/${QA_REPO}:${DEV_IMAGE_TAG}"
-
+      
           echo "=================================================="
           echo "Promoting image"
           echo "=================================================="
-
+      
           echo "SOURCE:"
           echo "$SOURCE"
-
+      
           echo ""
           echo "TARGET:"
           echo "$TARGET"
-
-          EXISTING_QA_DIGEST="$(aws ecr describe-images \
+      
+          set +e
+          QA_LOOKUP="$(aws ecr describe-images \
             --repository-name "$QA_REPO" \
             --image-ids imageTag="$DEV_IMAGE_TAG" \
             --query 'imageDetails[0].imageDigest' \
             --output text \
-            --region "$AWS_REGION" 2>/dev/null || true)"
-
-          if [[ -n "$EXISTING_QA_DIGEST" && "$EXISTING_QA_DIGEST" != "None" ]]; then
-
+            --region "$AWS_REGION" 2>&1)"
+          QA_LOOKUP_EXIT_CODE=$?
+          set -e
+      
+          if [[ "$QA_LOOKUP_EXIT_CODE" -eq 0 ]]; then
+      
+            EXISTING_QA_DIGEST="$QA_LOOKUP"
+      
             echo "QA tag already exists."
             echo "Existing QA digest:"
             echo "$EXISTING_QA_DIGEST"
-
+      
             if [[ "$EXISTING_QA_DIGEST" != "$DEV_IMAGE_DIGEST" ]]; then
               echo "::error::QA tag exists but points to a different digest."
+              echo "::error::Expected: $DEV_IMAGE_DIGEST"
+              echo "::error::Found:    $EXISTING_QA_DIGEST"
               exit 1
             fi
-
+      
             echo "QA already contains the exact same digest."
             echo "Promotion is already complete."
-
+      
           else
-
+      
+            if [[ "$QA_LOOKUP" != *"ImageNotFoundException"* ]]; then
+              echo "::error::Failed to check whether the QA image exists."
+              echo "$QA_LOOKUP"
+              exit 1
+            fi
+      
             echo "QA tag does not exist."
             echo "Copying exact DEV digest to QA..."
-
+      
             crane copy \
               "$SOURCE" \
               "$TARGET"
-
+      
             echo "Image promotion completed."
-
+      
           fi
-
+      
       # ============================================================
       # 14. Verify QA digest matches DEV digest
       # ============================================================
