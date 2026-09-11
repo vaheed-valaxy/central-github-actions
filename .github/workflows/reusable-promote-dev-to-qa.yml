@@ -106,7 +106,6 @@ jobs:
           path: ${{ env.GITOPS_DIR }}
           fetch-depth: 0
 
-
       # ============================================================
       # 2. Install yq
       # ============================================================
@@ -121,7 +120,6 @@ jobs:
           chmod +x /usr/local/bin/yq
 
           yq --version
-
 
       # ============================================================
       # 3. Ensure DEV Values file exists
@@ -138,8 +136,6 @@ jobs:
             exit 1
           fi
 
-
-
       # ============================================================
       # 4. Ensure QA Values file exists
       # ============================================================
@@ -155,7 +151,6 @@ jobs:
             echo "::error::Create $QA_VALUES_FILE in $GITOPS_REPO."
             exit 1
           fi
-
 
       # ============================================================
       # 5. Read Image DIGEST from DEV
@@ -181,7 +176,6 @@ jobs:
           echo "Service : $SERVICE"
           echo "Dev Image Digest  : $DEV_IMAGE_DIGEST"
 
-
       # ============================================================
       # 6. Validate DEV Image DIGEST
       # ============================================================
@@ -203,7 +197,6 @@ jobs:
           echo "Digest is valid:"
           echo "$DEV_IMAGE_DIGEST"
 
-
       # ============================================================
       # 7. Configure AWS using GitHub OIDC
       # ============================================================
@@ -212,7 +205,6 @@ jobs:
         with:
           role-to-assume: ${{ env.AWS_ECR_QA_PROMOTION_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-
 
       # ============================================================
       # 8. Get AWS Account ID
@@ -230,7 +222,6 @@ jobs:
           echo "account-id=$ACCOUNT_ID" >> "$GITHUB_OUTPUT"
 
           echo "AWS Account: $ACCOUNT_ID"
-
 
       # ============================================================
       # 9. Verify DEV image exists in ECR
@@ -253,7 +244,6 @@ jobs:
           echo "DEV image exists."
           echo "Repository: $DEV_REPO"
           echo "Digest:     $DEV_IMAGE_DIGEST"
-
 
       # ============================================================
       # 10. Find the original SHA tag from DEV
@@ -295,7 +285,6 @@ jobs:
           echo "Selected DEV image digest:"
           echo "$DEV_IMAGE_DIGEST"
 
-
       # ============================================================
       # 11. Install Crane
       # ============================================================
@@ -320,7 +309,6 @@ jobs:
 
           crane version
 
-
       # ============================================================
       # 12. Login Crane to ECR
       # ============================================================
@@ -342,7 +330,6 @@ jobs:
               "$REGISTRY" \
               --username AWS \
               --password-stdin
-
 
       # ============================================================
       # 13. Promote exact digest DEV → QA
@@ -410,7 +397,6 @@ jobs:
 
           fi
 
-
       # ============================================================
       # 14. Verify QA digest matches DEV digest
       # ============================================================
@@ -450,7 +436,6 @@ jobs:
           echo "SUCCESS"
           echo "DEV and QA contain the exact same image digest."
 
-
       # ============================================================
       # 15. Create QA promotion branch
       # ============================================================
@@ -472,7 +457,6 @@ jobs:
 
           echo "Created branch:"
           echo "$BRANCH"
-
 
       # ============================================================
       # 16. Update QA values
@@ -497,7 +481,6 @@ jobs:
           echo "Updated QA values:"
           cat "$QA_VALUES_FILE"
 
-
       # ============================================================
       # 17. Show Git diff
       # ============================================================
@@ -517,7 +500,6 @@ jobs:
             echo "::error::No QA values change detected."
             exit 1
           fi
-
 
       # ============================================================
       # 18. Commit QA promotion
@@ -541,7 +523,6 @@ jobs:
 
           echo "QA promotion commit created."
 
-
       # ============================================================
       # 19. Push promotion branch
       # ============================================================
@@ -560,7 +541,6 @@ jobs:
             "$BRANCH"
 
           echo "QA promotion branch pushed."
-
 
       # ============================================================
       # 20. Create QA promotion PR
