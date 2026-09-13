@@ -690,13 +690,8 @@ jobs:
           # --------------------------------------------------------
           # Check whether the remote branch already exists.
           # --------------------------------------------------------
-          if git ls-remote \
-               --exit-code \
-               --heads \
-               origin \
-               "$BRANCH" \
-               >/dev/null 2>&1; then
-
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+          
             echo ""
             echo "Branch already exists on origin."
             echo "Fetching existing branch..."
