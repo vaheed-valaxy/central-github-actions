@@ -186,7 +186,7 @@ jobs:
           echo "=================================================="
           echo "DEV image information"
           echo "=================================================="
-          echo "Service:          $SERVICE"
+          echo "Service: $SERVICE"
           echo "DEV image digest: $DEV_FILE_DIGEST"
 
           echo "DEV_FILE_DIGEST=$DEV_FILE_DIGEST" >> "$GITHUB_ENV"
@@ -242,8 +242,7 @@ jobs:
             exit 1
           fi
 
-          echo "AWS Account ID:"
-          echo "$ACCOUNT_ID"
+          echo "AWS Account ID: $ACCOUNT_ID"
 
           echo "account-id=$ACCOUNT_ID" >> "$GITHUB_OUTPUT"
 
@@ -269,14 +268,14 @@ jobs:
 
             echo "DEV image exists in ECR."
             echo "Repository: $DEV_ECR_REPO"
-            echo "Digest:     $DEV_FILE_DIGEST"
+            echo "Digest: $DEV_FILE_DIGEST"
 
             echo "dev-ecr-matched-digest=$DEV_FILE_DIGEST" >> "$GITHUB_OUTPUT"
 
           else
             echo "::error::DEV GitOps digest does not exist in DEV ECR."
             echo "Repository: $DEV_ECR_REPO"
-            echo "Digest:     $DEV_FILE_DIGEST"
+            echo "Digest: $DEV_FILE_DIGEST"
             echo "::error::Promotion cancelled."
 
             exit 1
@@ -304,12 +303,7 @@ jobs:
           echo "DEV tags:"
           echo "$TAGS"
 
-          DEV_IMAGE_TAG="$(
-            echo "$TAGS" |
-            tr '\t' '\n' |
-            grep '^sha-' |
-            head -n 1 || true
-          )"
+          DEV_IMAGE_TAG="$(echo "$TAGS" | tr '\t' '\n' | grep '^sha-' | head -n 1 || true)"
 
           if [[ -z "$DEV_IMAGE_TAG" ]]; then
             echo "::error::No sha-* tag found for DEV digest."
@@ -318,13 +312,11 @@ jobs:
           fi
 
           echo ""
-          echo "Service:"
-          echo "$SERVICE"
-
+          echo "Service: $SERVICE"
+          
           echo ""
-          echo "Selected DEV image tag:"
-          echo "$DEV_IMAGE_TAG"
-
+          echo "Selected DEV image tag: $DEV_IMAGE_TAG"
+         
           echo ""
           echo "Selected DEV image digest:"
           echo "$DEV_ECR_MATCHED_DIGEST"
@@ -381,7 +373,7 @@ jobs:
               echo "::error::QA tag exists but points to a different digest."
               echo "::error::This prevents accidental tag reuse."
               echo "::error::Expected: $DEV_ECR_MATCHED_DIGEST"
-              echo "::error::Found:    $EXISTING_QA_DIGEST"
+              echo "::error::Found: $EXISTING_QA_DIGEST"
               exit 1
             fi
 
