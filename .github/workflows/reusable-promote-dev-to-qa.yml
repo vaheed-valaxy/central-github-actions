@@ -1,5 +1,39 @@
 name: Reusable Promote to QA
-
+# ============================================================================== 
+# JOB: 1
+# ---------------------------------------------
+#  1. Checkout gitops Repo
+#  2. Install yq
+#  3. Ensure DEV values file exists
+#  4. Ensure QA values file exists
+#  5. Read image DIGEST from DEV values file
+#  6. Validate DEV image DIGEST
+#  7. Configure AWS Github OIDC
+#  8. Get AWS ACCOUNT ID
+#  9. Verify DEV image exixts in ECR
+#  10. Find the original SHA-TAG from ECR
+#  11. Check whether the exact image already exists in QA ECR
+#
+# JOB: 2
+# ---------------------------------------------
+#  1. Configure AWS using Github OIDC
+#  2. Install Crane
+#  3. Login Crane to ECR
+#  4. Promote exact DIGEST from DEV -> QA
+#  5. Verify QA DIGEST matches with DEV DIGEST
+#
+# JOB: 3
+# ---------------------------------------------
+#  1. Checkout gitops repo
+#  2. Install yq
+#  3. Check whether an open PR already exists
+#  4. Create or Reuse QA promotion branch
+#  5. Update QA image DIGEST
+#  6. Show git diff
+#  7. Commit QA promotion
+#  8. Push QA promotion branch
+#  9. Create QA promotion PR
+# ==============================================================================
 on:
   workflow_call:
     inputs:
