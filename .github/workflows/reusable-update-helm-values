@@ -1,0 +1,253 @@
+name: Reusable - Update DEV Helm Values
+
+on:
+  workflow_call:
+    inputs:
+      service-name:
+        description: "Service name"
+        required: true
+        type: string
+
+      runner:
+        description: "Runner label"
+        required: false
+        type: string
+        default: ubuntu-latest
+
+      gitops-owner:
+        description: "GitOps repository owner"
+        required: true
+        type: string
+
+      gitops-repo:
+        description: "GitOps repository"
+        required: true
+        type: string
+
+      helm-values-file:
+        description: "Path to Helm values.yaml inside GitOps repo"
+        required: true
+        type: string
+
+      image:
+        description: "Container image repository"
+        required: true
+        type: string
+
+      image-digest:
+        description: "Full immutable image digest"
+        required: true
+        type: string
+
+    secrets:
+      GITOPS_TOKEN:
+        required: true
+
+
+# ============================================================
+# Prevent concurrent DEV updates for the same service
+# ============================================================
+
+concurrency:
+  group: dev-helm-update-${{ inputs.gitops-repo }}-${{ inputs.service-name }}
+  cancel-in-progress: false
+
+
+jobs:
+
+  # ============================================================
+  # Update DEV Helm Values
+  # ============================================================
+
+  Update-Helm-Values-Job:
+    name: Update DEV Helm Values
+    runs-on: ${{ inputs.runner }}
+
+    permissions:
+      contents: read
+
+    env:
+      GITOPS_DIR: "_gitops"
+      VALUES_FILE: "${{ inputs.helm-values-file }}"
+      IMAGE: "${{ inputs.image }}"
+      IMAGE_DIGEST: "${{ inputs.image-digest }}"
+      YQ_VERSION: "v4.47.2"
+
+    steps:
+
+      # --------------------------------------------------------
+      # 01. Checkout GitOps repository
+      # --------------------------------------------------------
+
+      - name: Checkout GitOps Repository
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.gitops-owner }}/${{ inputs.gitops-repo }}
+          ref: main
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: ${{ env.GITOPS_DIR }}
+          fetch-depth: 0
+
+
+      # --------------------------------------------------------
+      # 02. Verify Helm values file
+      # --------------------------------------------------------
+
+      - name: Verify Values File
+        working-directory: ${{ env.GITOPS_DIR }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -f "$VALUES_FILE" ]; then
+            echo "::error::Helm values file not found: $VALUES_FILE"
+            exit 1
+          fi
+
+          echo "Helm values file found:"
+          echo "$VALUES_FILE"
+
+
+      # --------------------------------------------------------
+      # 03. Validate image digest
+      # --------------------------------------------------------
+
+      - name: Validate Image Digest
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$IMAGE_DIGEST" =~ ^sha256:[a-fA-F0-9]{64}$ ]]; then
+            echo "::error::Invalid image digest."
+            echo "::error::Expected format: sha256:<64 hexadecimal characters>"
+            exit 1
+          fi
+
+          echo "Image        : $IMAGE"
+          echo "Image Digest : $IMAGE_DIGEST"
+          echo "Digest format: valid"
+
+
+      # --------------------------------------------------------
+      # 04. Install yq
+      # --------------------------------------------------------
+
+      - name: Install yq
+        run: |
+          set -euo pipefail
+
+          sudo wget -qO /usr/local/bin/yq \
+            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+
+          sudo chmod +x /usr/local/bin/yq
+
+
+      # --------------------------------------------------------
+      # 05. Verify yq
+      # --------------------------------------------------------
+
+      - name: Verify yq
+        run: |
+          yq --version
+
+
+      # --------------------------------------------------------
+      # 06. Update DEV Helm values
+      # --------------------------------------------------------
+
+      - name: Update DEV Image Digest
+        working-directory: ${{ env.GITOPS_DIR }}
+        run: |
+          set -euo pipefail
+
+          echo "--------------------------------------------------"
+          echo "Updating DEV Helm values"
+          echo "--------------------------------------------------"
+          echo "File         : $VALUES_FILE"
+          echo "Image        : $IMAGE"
+          echo "Image Digest : $IMAGE_DIGEST"
+          echo "--------------------------------------------------"
+
+          yq -i '.image.digest = strenv(IMAGE_DIGEST)' "$VALUES_FILE"
+
+          echo "Updated digest:"
+          yq '.image.digest' "$VALUES_FILE"
+
+
+      # --------------------------------------------------------
+      # 07. Show updated values
+      # --------------------------------------------------------
+
+      - name: Show Updated Values
+        working-directory: ${{ env.GITOPS_DIR }}
+        run: |
+          echo "--------------------------------------------------"
+          echo "Updated Helm Values"
+          echo "--------------------------------------------------"
+
+          cat "$VALUES_FILE"
+
+
+      # --------------------------------------------------------
+      # 08. Check Git diff
+      # --------------------------------------------------------
+
+      - name: Check Git Diff
+        id: git-diff
+        working-directory: ${{ env.GITOPS_DIR }}
+        run: |
+          set -euo pipefail
+
+          echo "--------------------------------------------------"
+          echo "Git Diff"
+          echo "--------------------------------------------------"
+
+          git diff -- "$VALUES_FILE"
+
+          if git diff --quiet -- "$VALUES_FILE"; then
+            echo "DEV values already contain the required image digest."
+            echo "No new commit is required."
+
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "DEV values require an update."
+
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+
+      # --------------------------------------------------------
+      # 09. Commit and push DEV values
+      # --------------------------------------------------------
+
+      - name: Commit DEV Promotion
+        if: steps.git-diff.outputs.changed == 'true'
+        working-directory: ${{ env.GITOPS_DIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "--------------------------------------------------"
+          echo "Creating DEV commit"
+          echo "--------------------------------------------------"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add "$VALUES_FILE"
+
+          if git diff --cached --quiet; then
+            echo "No changes detected."
+            exit 0
+          fi
+
+          git commit \
+            -m "ci(dev): update ${{ inputs.service-name }} → ${IMAGE_DIGEST}"
+
+          echo "--------------------------------------------------"
+          echo "Pushing DEV values to main"
+          echo "--------------------------------------------------"
+
+          git push origin main
+
+          echo "--------------------------------------------------"
+          echo "DEV Helm values updated successfully."
+          echo "--------------------------------------------------"
