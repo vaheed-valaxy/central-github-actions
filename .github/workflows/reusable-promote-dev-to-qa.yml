@@ -108,7 +108,6 @@ jobs:
           path: ${{ env.GITOPS_DIR }}
           fetch-depth: 0
 
-
       # ============================================================
       # 02. Install yq
       # ============================================================
@@ -128,7 +127,6 @@ jobs:
 
           yq --version
 
-
       # ============================================================
       # 03. Ensure DEV Values file exists
       # ============================================================
@@ -147,7 +145,6 @@ jobs:
           echo "DEV values file found:"
           echo "$DEV_VALUES_FILE"
 
-
       # ============================================================
       # 04. Ensure QA Values file exists
       # ============================================================
@@ -165,7 +162,6 @@ jobs:
 
           echo "QA values file found:"
           echo "$QA_VALUES_FILE"
-
 
       # ============================================================
       # 05. Read Image DIGEST from DEV Values
@@ -190,7 +186,6 @@ jobs:
           echo "DEV image digest: $DEV_FILE_DIGEST"
 
           echo "DEV_FILE_DIGEST=$DEV_FILE_DIGEST" >> "$GITHUB_ENV"
-
        
       # ============================================================
       # 06. Validate DEV Image DIGEST
@@ -213,9 +208,6 @@ jobs:
           echo "Digest is valid:"
           echo "$DEV_FILE_DIGEST"
 
-          # echo "DEV_FILE_DIGEST=$DEV_FILE_DIGEST" >> "$GITHUB_ENV"
-
-
       # ============================================================
       # 07. Configure AWS using GitHub OIDC
       # ============================================================
@@ -224,7 +216,6 @@ jobs:
         with:
           role-to-assume: ${{ env.AWS_ECR_QA_PROMOTION_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-
 
       # ============================================================
       # 08. Get AWS Account ID
@@ -247,7 +238,6 @@ jobs:
           echo "AWS Account ID: $ACCOUNT_ID"
 
           echo "account-id=$ACCOUNT_ID" >> "$GITHUB_OUTPUT"
-
 
       # ============================================================
       # 09. Verify helm DEV file image exists in ECR
@@ -282,7 +272,6 @@ jobs:
 
             exit 1
           fi
-
 
       # ============================================================
       # 10. Find the original SHA tag from DEV
@@ -324,7 +313,6 @@ jobs:
           echo "$MATCHED_FILE_DIGEST_WITH_DEV_ECR"
 
           echo "dev-image-tag=$DEV_IMAGE_TAG" >> "$GITHUB_OUTPUT"
-
 
       # ============================================================
       # 11. Check whether the exact image already exists in QA ECR
@@ -388,7 +376,6 @@ jobs:
             exit 0
           fi
 
-
           # --------------------------------------------------------
           # QA tag does not exist
           # --------------------------------------------------------
@@ -401,7 +388,6 @@ jobs:
             exit 0
           fi
 
-
           # --------------------------------------------------------
           # Any unexpected AWS error
           # --------------------------------------------------------
@@ -409,7 +395,6 @@ jobs:
           echo "$QA_LOOKUP"
 
           exit 1
-
 
   # ================================================================
   # JOB 2
@@ -438,7 +423,6 @@ jobs:
           role-to-assume: ${{ env.AWS_ECR_QA_PROMOTION_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-
       # ============================================================
       # 02. Install Crane
       # ============================================================
@@ -462,7 +446,6 @@ jobs:
           sudo mv /tmp/crane /usr/local/bin/crane
 
           crane version
-
       
       # ============================================================
       # 03. Login Crane to ECR
@@ -481,11 +464,8 @@ jobs:
 
           aws ecr get-login-password \
             --region "$AWS_REGION" |
-            crane auth login "$REGISTRY" \
-              --username AWS \
-              --password-stdin
-
-
+            crane auth login "$REGISTRY" --username AWS --password-stdin
+              
       # ============================================================
       # 04. Promote exact digest DEV → QA
       # ============================================================
@@ -524,7 +504,6 @@ jobs:
           echo ""
           echo "Image promotion completed successfully from DEV → QA."
           echo "Check your DEV ECR and QA ECR..." 
-
 
       # ============================================================
       # 05. Verify QA digest matches DEV digest
@@ -613,7 +592,6 @@ jobs:
           path: ${{ env.GITOPS_DIR }}
           fetch-depth: 0
 
-
       # ============================================================
       # 02. Install yq
       # ============================================================
@@ -633,12 +611,9 @@ jobs:
 
           yq --version
 
-
       # ============================================================
       # 03. Determine a Promotion branch
       # ============================================================
-      # 
-      # Determine promotion branch
       #
       # Full digest contains ":" which is not valid in a Git
       # branch name.
@@ -683,8 +658,6 @@ jobs:
 
           echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
 
-      
-
       # ============================================================
       # 04. Check whether an open PR already exists
       # ============================================================
@@ -726,7 +699,6 @@ jobs:
             echo "existing=false" >> "$GITHUB_OUTPUT"
 
           fi
-
       
       # ============================================================
       # 05. Create or reuse promotion branch
@@ -766,7 +738,6 @@ jobs:
           echo ""
           echo "Current branch:"
           git branch --show-current
-
 
       # ============================================================
       # 06. Update QA image digest
@@ -808,9 +779,7 @@ jobs:
           echo ""
           echo "Updated QA image digest:"
 
-          yq -r '.image.digest' "$QA_VALUES_FILE"
-
-      
+          yq -r '.image.digest' "$QA_VALUES_FILE"      
 
       # ============================================================
       # 07. Show Git diff
@@ -824,9 +793,9 @@ jobs:
 
           set -euo pipefail
 
-          echo "=================================================="
+          echo "--------------------------------------------------"
           echo "Checking Git diff"
-          echo "=================================================="
+          echo "--------------------------------------------------"
 
           git status --short
 
@@ -854,7 +823,6 @@ jobs:
 
           fi
 
-      
       # ============================================================
       # 08. Commit QA values update
       # ============================================================
@@ -900,16 +868,15 @@ jobs:
 
           set -euo pipefail
 
-          echo "=================================================="
+          echo "--------------------------------------------------"
           echo "Pushing promotion branch"
-          echo "=================================================="
+          echo "--------------------------------------------------"
 
           git push --set-upstream origin "$BRANCH"
 
           echo ""
           echo "Promotion branch pushed:"
           echo "$BRANCH"
-
 
       # ============================================================
       # 10. Create Pull Request
@@ -934,12 +901,10 @@ jobs:
 
         run: |
           set -euo pipefail
-
           
           echo "=================================================="
           echo "Creating new QA promotion PR"
           echo "=================================================="
-
           
           PR_TITLE="promote(${SERVICE}): DEV → QA"
 
@@ -999,7 +964,6 @@ jobs:
               --title "$PR_TITLE" \
               --body "$PR_BODY"
           )"
-
           
           echo ""
           echo "QA promotion Pull Request created successfully"
