@@ -369,7 +369,7 @@ jobs:
 
             echo "Exact image already exists in QA ECR."
             echo "DEV ECR Digest: $MATCHED_FILE_DIGEST_WITH_DEV_ECR"
-            echo "QA ECR Digest: $EXISTING_QA_DIGEST"
+            echo "QA ECR Digest:  $EXISTING_QA_DIGEST"
             echo "Image copy can be skipped."
 
             echo "qa-image-already-exists=true" >> "$GITHUB_OUTPUT"
