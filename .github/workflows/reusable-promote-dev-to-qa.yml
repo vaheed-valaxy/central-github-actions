@@ -771,15 +771,24 @@ jobs:
 
           echo ""
           echo "New image digest: $DEV_IMAGE_DIGEST"
+
+          if [[ "$CURRENT_QA_DIGEST" == "$DEV_IMAGE_DIGEST" ]]; then
           
-          yq -i \
+            echo ""
+            echo "Both DEV and QA have same image Digest, no update is required...skipping update...!"
+            
+          else
+          
+            yq -i \
             '.image.digest = strenv(DEV_IMAGE_DIGEST)' \
             "$QA_VALUES_FILE"
 
-          echo ""
-          echo "Updated QA image digest:"
+            echo ""
+            echo "Updated QA image digest:"
 
-          yq -r '.image.digest' "$QA_VALUES_FILE"      
+            yq -r '.image.digest' "$QA_VALUES_FILE"
+          
+          fi 
 
       # ============================================================
       # 07. Show Git diff
