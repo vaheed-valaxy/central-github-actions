@@ -767,15 +767,18 @@ jobs:
           echo "QA values file: $QA_VALUES_FILE"
           
           echo ""
-          echo "Current Image Digest: $CURRENT_QA_DIGEST"
+          echo "Current QA Image Digest: "
+          echo "$CURRENT_QA_DIGEST"
 
           echo ""
-          echo "New image digest: $DEV_IMAGE_DIGEST"
-
+          echo "New QA image digest: "
+          echo "$DEV_IMAGE_DIGEST"
+          
           if [[ "$CURRENT_QA_DIGEST" == "$DEV_IMAGE_DIGEST" ]]; then
           
             echo ""
-            echo "Both DEV and QA have same image Digest, no update is required...skipping update...!"
+            echo "Both Current QA image Digest and New QA image Digest are exactly same..."
+            echo "No update is required...skipping update...!"
             
           else
           
