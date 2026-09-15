@@ -830,6 +830,7 @@ jobs:
       # 06. Update PROD image digest
       # ============================================================
       - name: Update PROD image digest
+        id: update-prod-image
         if: steps.existing-pr.outputs.existing != 'true'
         shell: bash
         working-directory: ${{ env.GITOPS_DIR }}
@@ -857,7 +858,8 @@ jobs:
           
             echo "No PROD Digest found"
             echo "Seems like first PROD promotion...Continuing...!"
-          
+            
+            echo "CURRENT_PROD_DIGEST=$CURRENT_PROD_DIGEST" >> "$GITHUB_OUTPUT"
           else
                       
             echo ""
@@ -940,7 +942,10 @@ jobs:
       - name: Commit PROD values update
         if: |
           steps.existing-pr.outputs.existing != 'true' &&
-          steps.git-diff.outputs.changed == 'true'
+          (
+          steps.git-diff.outputs.changed == 'true' || 
+          steps.update-prod-image.outputs.CURRENT_PROD_DIGEST == ''
+          )
         shell: bash
         working-directory: ${{ env.GITOPS_DIR }}
         run: |
