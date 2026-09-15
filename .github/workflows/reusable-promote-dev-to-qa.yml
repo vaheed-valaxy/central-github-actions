@@ -108,6 +108,7 @@ jobs:
           path: ${{ env.GITOPS_DIR }}
           fetch-depth: 0
 
+
       # ============================================================
       # 02. Install yq
       # ============================================================
@@ -127,6 +128,7 @@ jobs:
 
           yq --version
 
+
       # ============================================================
       # 03. Ensure DEV Values file exists
       # ============================================================
@@ -144,6 +146,7 @@ jobs:
 
           echo "DEV values file found:"
           echo "$DEV_VALUES_FILE"
+
 
       # ============================================================
       # 04. Ensure QA Values file exists
@@ -163,8 +166,9 @@ jobs:
           echo "QA values file found:"
           echo "$QA_VALUES_FILE"
 
+
       # ============================================================
-      # 05. Read Image DIGEST from DEV Values
+      # 05. Read DEV Image DIGEST from DEV Values
       # ============================================================
       - name: Read image DIGEST from DEV
         working-directory: ${{ env.GITOPS_DIR }}
@@ -179,6 +183,12 @@ jobs:
             exit 1
           fi
 
+          if [[ ! "$DEV_FILE_DIGEST" =~ ^sha256:[a-fA-F0-9]{64}$ ]]; then
+            echo "::error::Invalid DEV image digest."
+            echo "Received: $DEV_FILE_DIGEST"
+            exit 1
+          fi
+
           echo "=================================================="
           echo "DEV image information"
           echo "=================================================="
@@ -186,30 +196,66 @@ jobs:
           echo "DEV image digest: $DEV_FILE_DIGEST"
 
           echo "DEV_FILE_DIGEST=$DEV_FILE_DIGEST" >> "$GITHUB_ENV"
-       
+
+
       # ============================================================
-      # 06. Validate DEV Image DIGEST
+      # 06. Read QA Image DIGEST from QA Values
       # ============================================================
-      - name: Validate image digest
+      - name: Read image DIGEST from QA
+        working-directory: ${{ env.GITOPS_DIR }}
         shell: bash
         run: |
           set -euo pipefail
 
-          echo "=================================================="
-          echo "Validating image digest"
-          echo "=================================================="
+          QA_FILE_DIGEST="$(yq e '.image.digest' "$QA_VALUES_FILE")"
 
-          if [[ ! "$DEV_FILE_DIGEST" =~ ^sha256:[a-fA-F0-9]{64}$ ]]; then
-            echo "::error::Invalid image digest."
-            echo "Received: $DEV_FILE_DIGEST"
+          if [[ -z "$QA_FILE_DIGEST" || "$QA_FILE_DIGEST" == "null" ]]; then
+            echo "::error::Could not read .image.digest from $QA_VALUES_FILE"
             exit 1
           fi
 
-          echo "Digest is valid:"
-          echo "$DEV_FILE_DIGEST"
+          if [[ ! "$QA_FILE_DIGEST" =~ ^sha256:[a-fA-F0-9]{64}$ ]]; then
+            echo "::error::Invalid QA image digest."
+            echo "Received: $QA_FILE_DIGEST"
+            exit 1
+          fi
+
+          echo "=================================================="
+          echo "QA image information"
+          echo "=================================================="
+          echo "Service: $SERVICE"
+          echo "QA image digest: $QA_FILE_DIGEST"
+
+          # echo "QA_FILE_DIGEST=$QA_FILE_DIGEST" >> "$GITHUB_ENV"
+
 
       # ============================================================
-      # 07. Configure AWS using GitHub OIDC
+      # 07. Check equality of QA Image DIGEST and PROD Image DIGEST
+      # ============================================================
+      - name: Check equality of DEV Image DIGEST and QA Image DIGEST
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo ""
+          echo "DEV File DIGEST: "
+          echo "$DEV_FILE_DIGEST"
+
+          echo ""
+          echo "QA File DIGEST: "
+          echo "$QA_FILE_DIGEST"
+
+          if [[ "$DEV_FILE_DIGEST" == $QA_FILE_DIGEST ]]; then
+            echo ""
+            echo "Both Current DEV File Digest and QA File Digest are exactly same...!"
+            echo "No update is required...skipping update...exiting...!"
+
+            exit 1
+          fi
+       
+
+      # ============================================================
+      # 08. Configure AWS using GitHub OIDC
       # ============================================================
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -217,8 +263,9 @@ jobs:
           role-to-assume: ${{ env.AWS_ECR_QA_PROMOTION_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+
       # ============================================================
-      # 08. Get AWS Account ID
+      # 09. Get AWS Account ID
       # ============================================================
       - name: Get AWS account ID
         id: aws-account
@@ -239,8 +286,9 @@ jobs:
 
           echo "account-id=$ACCOUNT_ID" >> "$GITHUB_OUTPUT"
 
+
       # ============================================================
-      # 09. Verify helm DEV file image exists in ECR
+      # 10. Verify helm DEV file image exists in ECR
       # ============================================================
       - name: Verify helm DEV file image exists in ECR
         id: check-file-digest-with-dev-ecr           
@@ -273,8 +321,9 @@ jobs:
             exit 1
           fi
 
+
       # ============================================================
-      # 10. Find the original SHA tag from DEV
+      # 11. Find the original SHA tag from DEV
       # ============================================================
       - name: Find DEV image tag
         id: image-info
@@ -314,8 +363,9 @@ jobs:
 
           echo "dev-image-tag=$DEV_IMAGE_TAG" >> "$GITHUB_OUTPUT"
 
+
       # ============================================================
-      # 11. Check whether the exact image already exists in QA ECR
+      # 12. Check whether the exact image already exists in QA ECR
       # ============================================================
       - name: Check QA image
         id: qa-ecr-check
@@ -396,6 +446,7 @@ jobs:
 
           exit 1
 
+
   # ================================================================
   # JOB 2
   # Copy exact DEV image digest to QA
@@ -423,6 +474,7 @@ jobs:
           role-to-assume: ${{ env.AWS_ECR_QA_PROMOTION_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+
       # ============================================================
       # 02. Install Crane
       # ============================================================
@@ -446,6 +498,7 @@ jobs:
           sudo mv /tmp/crane /usr/local/bin/crane
 
           crane version
+
       
       # ============================================================
       # 03. Login Crane to ECR
@@ -465,6 +518,7 @@ jobs:
           aws ecr get-login-password \
             --region "$AWS_REGION" |
             crane auth login "$REGISTRY" --username AWS --password-stdin
+
               
       # ============================================================
       # 04. Promote exact digest DEV → QA
@@ -504,6 +558,7 @@ jobs:
           echo ""
           echo "Image promotion completed successfully from DEV → QA."
           echo "Check your DEV ECR and QA ECR..." 
+
 
       # ============================================================
       # 05. Verify QA digest matches DEV digest
@@ -592,6 +647,7 @@ jobs:
           path: ${{ env.GITOPS_DIR }}
           fetch-depth: 0
 
+
       # ============================================================
       # 02. Install yq
       # ============================================================
@@ -610,6 +666,7 @@ jobs:
           sudo install -m 0755 /tmp/yq /usr/local/bin/yq
 
           yq --version
+
 
       # ============================================================
       # 03. Determine a Promotion branch
@@ -658,6 +715,7 @@ jobs:
 
           echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
 
+
       # ============================================================
       # 04. Check whether an open PR already exists
       # ============================================================
@@ -699,6 +757,7 @@ jobs:
             echo "existing=false" >> "$GITHUB_OUTPUT"
 
           fi
+
       
       # ============================================================
       # 05. Create or reuse promotion branch
@@ -738,6 +797,7 @@ jobs:
           echo ""
           echo "Current branch:"
           git branch --show-current
+
 
       # ============================================================
       # 06. Update QA image digest
@@ -793,6 +853,7 @@ jobs:
           
           fi 
 
+
       # ============================================================
       # 07. Show Git diff
       # ============================================================
@@ -834,6 +895,7 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
 
           fi
+
 
       # ============================================================
       # 08. Commit QA values update
@@ -889,6 +951,7 @@ jobs:
           echo ""
           echo "Promotion branch pushed:"
           echo "$BRANCH"
+          
 
       # ============================================================
       # 10. Create Pull Request
