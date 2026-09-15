@@ -226,7 +226,7 @@ jobs:
           echo "Service: $SERVICE"
           echo "PROD image digest: $PROD_FILE_DIGEST"
 
-          echo "PROD_FILE_DIGEST=$PROD_FILE_DIGEST" >> "$GITHUB_ENV"
+          # echo "PROD_FILE_DIGEST=$PROD_FILE_DIGEST" >> "$GITHUB_ENV"
 
 
 
