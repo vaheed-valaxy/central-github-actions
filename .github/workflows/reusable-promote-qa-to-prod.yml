@@ -76,7 +76,7 @@ env:
   PROD_ECR_REPO: ${{ inputs.prod-ecr-repo }}
 
   AWS_REGION: ${{ inputs.aws-region }}
-  AWS_ECR_QA_PROMOTION_ROLE_ARN: ${{ inputs.aws-ecr-prod-promotion-role-arn }}
+  AWS_ECR_PROD_PROMOTION_ROLE_ARN: ${{ inputs.aws-ecr-prod-promotion-role-arn }}
 
   CRANE_VERSION: v0.21.7
   YQ_VERSION: "v4.47.1"
