@@ -227,7 +227,7 @@ jobs:
             echo "Could not read .image.digest from $PROD_VALUES_FILE"
             echo "Prod Digest value might be empty/null"
             echo "Seems like first promotion...Continuing..."
-            exit 0
+            # exit 0
           fi
            
           if [[ ! "$PROD_FILE_DIGEST" =~ ^sha256:[a-fA-F0-9]{64}$ ]]; then
