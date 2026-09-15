@@ -859,7 +859,7 @@ jobs:
             echo "No PROD Digest found"
             echo "Seems like first PROD promotion...Continuing...!"
             
-            echo "CURRENT_PROD_DIGEST=$CURRENT_PROD_DIGEST" >> "$GITHUB_OUTPUT"
+            # echo "CURRENT_PROD_DIGEST=$CURRENT_PROD_DIGEST" >> "$GITHUB_OUTPUT"
           else
                       
             echo ""
@@ -875,24 +875,22 @@ jobs:
               echo ""
               echo "Both Current PROD image Digest and New PROD image Digest are exactly same...!"
               echo "No update is required...skipping update...!"
-            
-            else
-          
-              yq -i \
-              '.image.digest = strenv(QA_IMAGE_DIGEST)' \
-              "$PROD_VALUES_FILE"
 
-              echo ""
-              echo "Updated PROD image digest:"
-
-              yq -r '.image.digest' "$PROD_VALUES_FILE"
-          
-            fi 
-            
+              exit 0     # Jumps to next GH Actions step, will not execute subsequent commands in the current step
+            fi
+                      
           fi
+          
+          yq -i \
+          '.image.digest = strenv(QA_IMAGE_DIGEST)' \
+          "$PROD_VALUES_FILE"
+
+          echo ""
+          echo "Updated PROD image digest:"
+
+          yq -r '.image.digest' "$PROD_VALUES_FILE"
+          
             
-
-
       # ============================================================
       # 07. Show Git diff
       # ============================================================
@@ -940,9 +938,11 @@ jobs:
       # 08. Commit PROD values update
       # ============================================================
       - name: Commit PROD values update
+      
         if: |
           steps.existing-pr.outputs.existing != 'true' &&
           steps.git-diff.outputs.changed == 'true'
+          
         shell: bash
         working-directory: ${{ env.GITOPS_DIR }}
         run: |
@@ -972,9 +972,11 @@ jobs:
       # 09. Push promotion branch
       # ============================================================
       - name: Push promotion branch
+      
         if: |
           steps.existing-pr.outputs.existing != 'true' &&
           steps.git-diff.outputs.changed == 'true'
+          
         shell: bash
         working-directory: ${{ env.GITOPS_DIR }}
         run: |
@@ -1000,10 +1002,7 @@ jobs:
         
         if: |
           steps.existing-pr.outputs.existing != 'true' &&
-          (
-          steps.git-diff.outputs.changed == 'true' ||
-          steps.update-prod-image.outputs.CURRENT_PROD_DIGEST == ''
-          )
+          steps.git-diff.outputs.changed == 'true'
           
         env:
           GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
