@@ -9,6 +9,16 @@ on:
         required: true
         type: string
 
+      dev-values-file:
+        description: "DEV helm Values file"
+        required: true
+        type: string
+
+      qa-values-file:
+        description: "QA helm values file"
+        required: true
+        type: string
+
       runner:
         description: "Runner label"
         required: false
@@ -71,8 +81,8 @@ env:
   CRANE_VERSION: v0.21.7
   YQ_VERSION: "v4.47.1"
 
-  DEV_VALUES_FILE: "envs/dev/values-${{ inputs.service-name }}.yaml"
-  QA_VALUES_FILE: "envs/qa/values-${{ inputs.service-name }}.yaml"
+  DEV_VALUES_FILE: ${{ inputs.dev-values-file }}
+  QA_VALUES_FILE: ${{ inputs.qa-values-file }}
 
 concurrency:
   group: promote-dev-to-qa-${{ inputs.gitops-repo }}-${{ inputs.service-name }}
