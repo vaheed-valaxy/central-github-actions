@@ -562,10 +562,10 @@ jobs:
           echo "Check your QA ECR and PROD ECR..." 
 
 
-      # ============================================================
-      # 05. Verify PROD digest matches with QA digest
-      # ============================================================
-      - name: Verify PROD digest matches QA digest in ECR
+      # ==============================================================
+      # 05. Verify PROD digest matches with QA digest (after copy)
+      # ==============================================================
+      - name: Verify PROD digest matches QA digest in ECR (after copy)
         id: check-qa-prod-ecr-match
         shell: bash
         env:
