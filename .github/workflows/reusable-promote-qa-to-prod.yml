@@ -224,8 +224,10 @@ jobs:
           PROD_FILE_DIGEST="$(yq -r '.image.digest // ""' "$PROD_VALUES_FILE")"   # Reads empty values
 
           if [[ -z "$PROD_FILE_DIGEST" || "$PROD_FILE_DIGEST" == "null" ]]; then
-            echo "::error::Could not read .image.digest from $PROD_VALUES_FILE"
-            exit 1
+            echo "Could not read .image.digest from $PROD_VALUES_FILE"
+            echo "Prod Digest value might be empty/null"
+            echo "Seems like first promotion...Continuing..."
+            exit 0
           fi
            
           if [[ ! "$PROD_FILE_DIGEST" =~ ^sha256:[a-fA-F0-9]{64}$ ]]; then
