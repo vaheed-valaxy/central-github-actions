@@ -1,4 +1,4 @@
-name: Reusable Promote to PROD
+name: Reusable Promote QA to PROD
 
 on:
   workflow_call:
@@ -14,6 +14,16 @@ on:
         required: false
         type: string
         default: ubuntu-latest
+
+      qa-values-file:
+        description: "QA helm Values file"
+        required: true
+        type: string
+
+      prod-values-file:
+        description: "PROD helm values file"
+        required: true
+        type: string
 
       gitops-repo:
         description: "GitOps repository name"
@@ -71,8 +81,8 @@ env:
   CRANE_VERSION: v0.21.7
   YQ_VERSION: "v4.47.1"
 
-  QA_VALUES_FILE: "envs/qa/values-${{ inputs.service-name }}.yaml"
-  PROD_VALUES_FILE: "envs/prod/values-${{ inputs.service-name }}.yaml"
+  QA_VALUES_FILE: ${{ inputs.qa-values-file }}
+  PROD_VALUES_FILE: ${{ inputs.prod-values-file }}
 
 concurrency:
   group: promote-qa-to-prod-${{ inputs.gitops-repo }}-${{ inputs.service-name }}
