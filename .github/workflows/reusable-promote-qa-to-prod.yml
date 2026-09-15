@@ -942,10 +942,7 @@ jobs:
       - name: Commit PROD values update
         if: |
           steps.existing-pr.outputs.existing != 'true' &&
-          (
-          steps.git-diff.outputs.changed == 'true' || 
-          steps.update-prod-image.outputs.CURRENT_PROD_DIGEST == ''
-          )
+          steps.git-diff.outputs.changed == 'true'
         shell: bash
         working-directory: ${{ env.GITOPS_DIR }}
         run: |
@@ -1003,8 +1000,11 @@ jobs:
         
         if: |
           steps.existing-pr.outputs.existing != 'true' &&
-          steps.git-diff.outputs.changed == 'true'
-
+          (
+          steps.git-diff.outputs.changed == 'true' ||
+          steps.update-prod-image.outputs.CURRENT_PROD_DIGEST == ''
+          )
+          
         env:
           GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
           QA_IMAGE_DIGEST: ${{ needs.Promote-Check-Job.outputs.matched-file-digest-with-qa-ecr }}
