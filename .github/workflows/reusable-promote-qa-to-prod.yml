@@ -257,17 +257,14 @@ jobs:
           echo "QA File DIGEST: "
           echo "$QA_FILE_DIGEST"
 
-          if [[ ! -z "$PROD_FILE_DIGEST" || ! "$PROD_FILE_DIGEST" = "null" ]]; then
-            echo ""
-            echo "PROD File DIGEST: "
-            echo "$PROD_FILE_DIGEST"
-          fi
-
            if [[ -z "$PROD_FILE_DIGEST" || "$PROD_FILE_DIGEST" == "null" ]]; then
              echo "Cannot compare QA Digest with PROD Digest"
              echo "Because PROD Digest is empty or null"
              echo "Seems like first PROD promotion...Continuing...!"
              exit 0
+           else
+             echo "PROD file DIGEST: "
+             echo "$PROD_FILE_DIGEST"
            fi
 
           if [[ "$QA_FILE_DIGEST" == $PROD_FILE_DIGEST ]]; then
