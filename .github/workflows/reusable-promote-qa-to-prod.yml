@@ -227,6 +227,8 @@ jobs:
             echo "Could not read .image.digest from $PROD_VALUES_FILE"
             echo "Prod Digest value might be empty or null"
             echo "Seems like first PROD promotion...Continuing...!"
+
+            echo "PROD_FILE_DIGEST=$PROD_FILE_DIGEST" >> "$GITHUB_ENV"
             exit 0
           fi
            
