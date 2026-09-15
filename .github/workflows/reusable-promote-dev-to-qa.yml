@@ -236,7 +236,7 @@ jobs:
           echo "Service: $SERVICE"
           echo "QA image digest: $QA_FILE_DIGEST"
 
-          # echo "QA_FILE_DIGEST=$QA_FILE_DIGEST" >> "$GITHUB_ENV"
+          echo "QA_FILE_DIGEST=$QA_FILE_DIGEST" >> "$GITHUB_ENV"
 
 
       # ============================================================
