@@ -857,7 +857,7 @@ jobs:
 
           CURRENT_QA_DIGEST="$(yq -r '.image.digest // ""' "$QA_VALUES_FILE")"
 
-          if [[ -z "$CURRENT_PROD_DIGEST" || "$CURRENT_PROD_DIGEST" == "null" ]]; then
+          if [[ -z "$CURRENT_QA_DIGEST" || "$CURRENT_QA_DIGEST" == "null" ]]; then
           
             echo "No QA Digest found"
             echo "Seems like first QA promotion...Continuing...!"
