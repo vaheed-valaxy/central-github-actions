@@ -225,9 +225,9 @@ jobs:
 
           if [[ -z "$PROD_FILE_DIGEST" || "$PROD_FILE_DIGEST" == "null" ]]; then
             echo "Could not read .image.digest from $PROD_VALUES_FILE"
-            echo "Prod Digest value might be empty/null"
-            echo "Seems like first promotion...Continuing..."
-            # exit 0
+            echo "Prod Digest value might be empty or null"
+            echo "Seems like first PROD promotion...Continuing...!"
+            exit 0
           fi
            
           if [[ ! "$PROD_FILE_DIGEST" =~ ^sha256:[a-fA-F0-9]{64}$ ]]; then
@@ -261,12 +261,22 @@ jobs:
           echo "PROD File DIGEST: "
           echo "$PROD_FILE_DIGEST"
 
-          if [[ "$QA_FILE_DIGEST" == $PROD_FILE_DIGEST ]]; then
-            echo ""
-            echo "Both Current QA File Digest and PROD File Digest are exactly same...!"
-            echo "No update is required...skipping update...exiting...!"
+           if [[ -z "$PROD_FILE_DIGEST" || "$PROD_FILE_DIGEST" == "null" ]]; then
+             echo "Cannot compare QA Digest with PROD Digest"
+             echo "Because PROD Digest is empty or null"
+             echo "Seems like first PROD promotion...Continuing...!"
+             exit 0
+           fi
 
+          if [[ "$QA_FILE_DIGEST" == $PROD_FILE_DIGEST ]]; then
+            echo "=================================================="
+            echo "Image already promoted to PROD"
+            echo "=================================================="
+            echo "QA and PROD contain the same image digest."
+            echo "Nothing to promote."
+            
             exit 1
+            
           fi
 
 
