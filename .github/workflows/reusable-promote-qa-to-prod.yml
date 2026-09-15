@@ -848,37 +848,47 @@ jobs:
             exit 1
           fi
 
-          CURRENT_PROD_DIGEST="$(yq -r '.image.digest // ""' "$PROD_VALUES_FILE")"
-
           echo ""
           echo "PROD values file: $PROD_VALUES_FILE"
-          
-          echo ""
-          echo "Current PROD Image Digest: "
-          echo "$CURRENT_PROD_DIGEST"
 
-          echo ""
-          echo "New PROD image digest: "
-          echo "$PROD_IMAGE_DIGEST"
+          CURRENT_PROD_DIGEST="$(yq -r '.image.digest // ""' "$PROD_VALUES_FILE")"
+
+          if [[ -z "$CURRENT_PROD_DIGEST" || "$CURRENT_PROD_DIGEST" == "null" ]]; then
           
-          if [[ "$CURRENT_PROD_DIGEST" == "$QA_IMAGE_DIGEST" ]]; then
+            echo "No PROD Digest found"
+            echo "Seems like first PROD promotion...Continuing...!"
           
-            echo ""
-            echo "Both Current PROD image Digest and New PROD image Digest are exactly same...!"
-            echo "No update is required...skipping update...!"
-            
           else
-          
-            yq -i \
-            '.image.digest = strenv(QA_IMAGE_DIGEST)' \
-            "$PROD_VALUES_FILE"
+                      
+            echo ""
+            echo "Current PROD Image Digest: "
+            echo "$CURRENT_PROD_DIGEST"
 
             echo ""
-            echo "Updated PROD image digest:"
-
-            yq -r '.image.digest' "$PROD_VALUES_FILE"
+            echo "New PROD image digest: "
+            echo "$QA_IMAGE_DIGEST"
           
-          fi 
+            if [[ "$CURRENT_PROD_DIGEST" == "$QA_IMAGE_DIGEST" ]]; then
+          
+              echo ""
+              echo "Both Current PROD image Digest and New PROD image Digest are exactly same...!"
+              echo "No update is required...skipping update...!"
+            
+            else
+          
+              yq -i \
+              '.image.digest = strenv(QA_IMAGE_DIGEST)' \
+              "$PROD_VALUES_FILE"
+
+              echo ""
+              echo "Updated PROD image digest:"
+
+              yq -r '.image.digest' "$PROD_VALUES_FILE"
+          
+            fi 
+            
+          fi
+            
 
 
       # ============================================================
