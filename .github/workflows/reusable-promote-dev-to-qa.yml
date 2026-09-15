@@ -186,7 +186,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          DEV_FILE_DIGEST="$(yq e '.image.digest' "$DEV_VALUES_FILE")"
+          # DEV_FILE_DIGEST="$(yq e '.image.digest' "$DEV_VALUES_FILE")"       # Gives error if value is not there
+
+          DEV_FILE_DIGEST="$(yq -r '.image.digest // ""' "$QA_VALUES_FILE")"   # Reads empty value also
 
           if [[ -z "$DEV_FILE_DIGEST" || "$DEV_FILE_DIGEST" == "null" ]]; then
             echo "::error::Could not read .image.digest from $DEV_VALUES_FILE"
@@ -217,11 +219,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          QA_FILE_DIGEST="$(yq e '.image.digest' "$QA_VALUES_FILE")"
+          # QA_FILE_DIGEST="$(yq e '.image.digest' "$QA_VALUES_FILE")"          # Gives error if value is not there
+
+          QA_FILE_DIGEST="$(yq -r '.image.digest // ""' "$PROD_VALUES_FILE")"   # Reads empty values
 
           if [[ -z "$QA_FILE_DIGEST" || "$QA_FILE_DIGEST" == "null" ]]; then
-            echo "::error::Could not read .image.digest from $QA_VALUES_FILE"
-            exit 1
+            echo "Could not read .image.digest from $QA_VALUES_FILE"
+            echo "Prod Digest value might be empty or null"
+            echo "Seems like first PROD promotion...Continuing...!"
+
+            echo "QA_FILE_DIGEST=$QA_FILE_DIGEST" >> "$GITHUB_ENV"
+            exit 0
           fi
 
           if [[ ! "$QA_FILE_DIGEST" =~ ^sha256:[a-fA-F0-9]{64}$ ]]; then
@@ -251,15 +259,25 @@ jobs:
           echo "DEV File DIGEST: "
           echo "$DEV_FILE_DIGEST"
 
-          echo ""
-          echo "QA File DIGEST: "
-          echo "$QA_FILE_DIGEST"
+          if [[ -z "$QA_FILE_DIGEST" || "$QA_FILE_DIGEST" == "null" ]]; then
+             echo "Cannot compare DEV Digest with QA Digest"
+             echo "Because QA Digest is empty or null"
+             echo "Seems like first QA promotion...Continuing...!"
+             exit 0
+           else
+             echo ""
+             echo "QA File DIGEST: "
+             echo "$QA_FILE_DIGEST"
+           fi
 
+          
           if [[ "$DEV_FILE_DIGEST" == $QA_FILE_DIGEST ]]; then
-            echo ""
-            echo "Both Current DEV File Digest and QA File Digest are exactly same...!"
-            echo "No update is required...skipping update...exiting...!"
-
+            echo "=================================================="
+            echo "Image already promoted to QA"
+            echo "=================================================="
+            echo "DEV and QA contain the same image digest."
+            echo "Nothing to promote to QA."
+            
             exit 1
           fi
        
@@ -362,13 +380,15 @@ jobs:
           fi
 
           echo ""
-          echo "Service: $SERVICE"
+          echo "Service: "
+          echo "$SERVICE"
           
           echo ""
-          echo "Selected DEV image tag: $DEV_IMAGE_TAG"
+          echo "Selected DEV image tag: "
+          echo "$DEV_IMAGE_TAG"
          
           echo ""
-          echo "Selected DEV image digest:"
+          echo "Selected DEV image digest: "
           echo "$MATCHED_FILE_DIGEST_WITH_DEV_ECR"
 
           echo "dev-image-tag=$DEV_IMAGE_TAG" >> "$GITHUB_OUTPUT"
@@ -560,18 +580,18 @@ jobs:
 
           echo ""
           echo "Copying exact DEV digest with exact TAG to QA..."
-          echo "Dev Ecr Tag: $DEV_IMAGE_TAG"
-          echo "Dev Ecr Digest: $MATCHED_FILE_DIGEST_WITH_DEV_ECR"
+          echo "DEV ECR Tag: $DEV_IMAGE_TAG"
+          echo "DEV ECR Digest: $MATCHED_FILE_DIGEST_WITH_DEV_ECR"
           
           crane copy "$SOURCE" "$TARGET"
 
           echo ""
           echo "Image promotion completed successfully from DEV → QA."
-          echo "Check your DEV ECR and QA ECR..." 
+          echo "Check your DEV ECR and QA ECR...!" 
 
 
       # ============================================================
-      # 05. Verify QA digest matches DEV digest
+      # 05. Verify QA digest matches DEV digest (after copy)
       # ============================================================
       - name: Verify QA digest matches DEV digest in ECR
         id: check-dev-qa-ecr-match
@@ -613,7 +633,7 @@ jobs:
           echo "SUCCESS"
           echo "DEV and QA contain the exact same image digest."
           echo "DEV ECR Digest: $MATCHED_FILE_DIGEST_WITH_DEV_ECR"
-          echo "QA ECR Digest: $QA_DIGEST"
+          echo "QA ECR Digest : $QA_DIGEST"
 
           echo "is-dev-qa-ecr-digest-matched=true" >> "$GITHUB_OUTPUT"
           echo "matched-dev-qa-ecr-digest=$MATCHED_FILE_DIGEST_WITH_DEV_ECR" >> "$GITHUB_OUTPUT"     
@@ -813,6 +833,7 @@ jobs:
       # 06. Update QA image digest
       # ============================================================
       - name: Update QA image digest
+        id: update-qa-digest
         if: steps.existing-pr.outputs.existing != 'true'
         shell: bash
         working-directory: ${{ env.GITOPS_DIR }}
@@ -831,38 +852,47 @@ jobs:
             exit 1
           fi
 
-          CURRENT_QA_DIGEST="$(yq -r '.image.digest // ""' "$QA_VALUES_FILE")"
-
           echo ""
           echo "QA values file: $QA_VALUES_FILE"
-          
-          echo ""
-          echo "Current QA Image Digest: "
-          echo "$CURRENT_QA_DIGEST"
 
-          echo ""
-          echo "New QA image digest: "
-          echo "$DEV_IMAGE_DIGEST"
+          CURRENT_QA_DIGEST="$(yq -r '.image.digest // ""' "$QA_VALUES_FILE")"
+
+          if [[ -z "$CURRENT_PROD_DIGEST" || "$CURRENT_PROD_DIGEST" == "null" ]]; then
           
-          if [[ "$CURRENT_QA_DIGEST" == "$DEV_IMAGE_DIGEST" ]]; then
-          
-            echo ""
-            echo "Both Current QA image Digest and New QA image Digest are exactly same..."
-            echo "No update is required...skipping update...!"
+            echo "No QA Digest found"
+            echo "Seems like first QA promotion...Continuing...!"
             
           else
           
-            yq -i \
-            '.image.digest = strenv(DEV_IMAGE_DIGEST)' \
-            "$QA_VALUES_FILE"
+            echo ""
+            echo "Current QA Image Digest: "
+            echo "$CURRENT_QA_DIGEST"
 
             echo ""
-            echo "Updated QA image digest:"
-
-            yq -r '.image.digest' "$QA_VALUES_FILE"
+            echo "New QA image digest: "
+            echo "$DEV_IMAGE_DIGEST"
           
-          fi 
+            if [[ "$CURRENT_QA_DIGEST" == "$DEV_IMAGE_DIGEST" ]]; then
+          
+              echo ""
+              echo "Both Current QA image Digest and New QA image Digest are exactly same..."
+              echo "No update is required...skipping update...!"
 
+              exit 0     # Jumps to next GH Actions step, will not execute subsequent commands in the current step
+
+            fi
+
+          fi
+          
+          yq -i \
+          '.image.digest = strenv(DEV_IMAGE_DIGEST)' \
+          "$QA_VALUES_FILE"
+
+          echo ""
+          echo "Updated QA image digest:"
+
+          yq -r '.image.digest' "$QA_VALUES_FILE"
+          
 
       # ============================================================
       # 07. Show Git diff
@@ -997,28 +1027,28 @@ jobs:
 
           ## QA Image Promotion
 
-          Service: \`${SERVICE}\`
+          Service:             \`${SERVICE}\`
 
-          Actor: \`${ACTOR}\`
+          Actor:               \`${ACTOR}\`
 
           Source workflow ref: \`${REF_NAME}\`
 
-          Promotion branch: \`${BRANCH}\`
+          Promotion branch:    \`${BRANCH}\`
 
-          DEV repository: \`${DEV_ECR_REPO}\`
+          DEV repository:      \`${DEV_ECR_REPO}\`
 
-          QA repository: \`${QA_ECR_REPO}\`
+          QA repository:       \`${QA_ECR_REPO}\`
 
-          Image tag: \`${DEV_IMAGE_TAG}\`
+          Image tag:           \`${DEV_IMAGE_TAG}\`
 
-          Image digest: \`${DEV_IMAGE_DIGEST}\`
+          Image digest:        \`${DEV_IMAGE_DIGEST}\`
 
           Workflow run:
           ${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}
 
           ## Promotion
 
-          \`DEV → QA\`
+          \`**DEV → QA**\`
 
           ## Verification
 
