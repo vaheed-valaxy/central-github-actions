@@ -1,4 +1,4 @@
-name: Reusable Promote to QA
+name: Reusable Promote DEV to QA
 
 on:
   workflow_call:
