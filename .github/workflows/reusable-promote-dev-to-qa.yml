@@ -225,7 +225,7 @@ jobs:
 
           if [[ -z "$QA_FILE_DIGEST" || "$QA_FILE_DIGEST" == "null" ]]; then
             echo "Could not read .image.digest from $QA_VALUES_FILE"
-            echo "Prod Digest value might be empty or null"
+            echo "QA Digest value might be empty or null"
             echo "Seems like first PROD promotion...Continuing...!"
 
             echo "QA_FILE_DIGEST=$QA_FILE_DIGEST" >> "$GITHUB_ENV"
