@@ -730,7 +730,9 @@ jobs:
 
           DIGEST_SHORT="${DIGEST_HEX:0:12}"
 
-          BRANCH="promote/${SERVICE}-dev-to-qa-${DIGEST_SHORT}"
+          # BRANCH="promote/${SERVICE}-dev-to-qa-${DIGEST_SHORT}"
+
+          BRANCH="promote/${SERVICE}-dev-to-qa"
 
           echo "Full DEV digest:"
           echo "$DEV_IMAGE_DIGEST"
