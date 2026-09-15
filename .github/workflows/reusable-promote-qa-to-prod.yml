@@ -186,7 +186,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          QA_FILE_DIGEST="$(yq e '.image.digest' "$QA_VALUES_FILE")"
+          # QA_FILE_DIGEST="$(yq e '.image.digest' "$QA_VALUES_FILE")"        # Gives error if value is not there
+          
+          QA_FILE_DIGEST="$(yq -r '.image.digest // ""' "$QA_VALUES_FILE")"   # Reads empty value
 
           if [[ -z "$QA_FILE_DIGEST" || "$QA_FILE_DIGEST" == "null" ]]; then
             echo "::error::Could not read .image.digest from $QA_VALUES_FILE"
@@ -217,7 +219,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          PROD_FILE_DIGEST="$(yq e '.image.digest' "$PROD_VALUES_FILE")"
+          # PROD_FILE_DIGEST="$(yq e '.image.digest' "$PROD_VALUES_FILE")"        # Gives error if value is not there
+
+          PROD_FILE_DIGEST="$(yq -r '.image.digest // ""' "$PROD_VALUES_FILE")"   # Reads empty values
 
           if [[ -z "$PROD_FILE_DIGEST" || "$PROD_FILE_DIGEST" == "null" ]]; then
             echo "::error::Could not read .image.digest from $PROD_VALUES_FILE"
