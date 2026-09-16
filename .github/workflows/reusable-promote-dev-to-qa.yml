@@ -863,9 +863,9 @@ jobs:
             echo "Reusing the existing branch:"
             echo "$BRANCH"
 
-            git fetch origin "$BRANCH"
+            git fetch origin main
 
-            git checkout -B "$BRANCH" "origin/$BRANCH"
+            git checkout -B "$BRANCH" "origin/main"
 
           else
 
@@ -1047,10 +1047,9 @@ jobs:
           echo "Pushing stable promotion branch"
           echo "=================================================="
 
-          git push \
-            --set-upstream \
-            origin \
-            "$BRANCH"
+          # git push --set-upstream origin "$BRANCH"
+            
+          git push --force-with-lease origin "$BRANCH"
 
           echo ""
           echo "Promotion branch pushed:"
