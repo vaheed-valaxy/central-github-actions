@@ -10,12 +10,12 @@ on:
         type: string
 
       dev-values-file:
-        description: "DEV helm Values file"
+        description: "DEV Helm values file"
         required: true
         type: string
 
       qa-values-file:
-        description: "QA helm values file"
+        description: "QA Helm values file"
         required: true
         type: string
 
@@ -103,6 +103,7 @@ jobs:
       dev-image-tag: ${{ steps.image-info.outputs.dev-image-tag }}
       matched-file-digest-with-dev-ecr: ${{ steps.check-file-digest-with-dev-ecr.outputs.matched-file-digest-with-dev-ecr }}
       qa-image-already-exists: ${{ steps.qa-ecr-check.outputs.qa-image-already-exists }}
+      qa-already-current: ${{ steps.compare-digests.outputs.qa-already-current }}
 
     steps:
 
@@ -140,7 +141,7 @@ jobs:
 
 
       # ============================================================
-      # 03. Ensure DEV Values file exists
+      # 03. Ensure DEV values file exists
       # ============================================================
       - name: Ensure DEV values file exists
         working-directory: ${{ env.GITOPS_DIR }}
@@ -159,7 +160,7 @@ jobs:
 
 
       # ============================================================
-      # 04. Ensure QA Values file exists
+      # 04. Ensure QA values file exists
       # ============================================================
       - name: Ensure QA values file exists
         working-directory: ${{ env.GITOPS_DIR }}
@@ -178,7 +179,7 @@ jobs:
 
 
       # ============================================================
-      # 05. Read DEV Image DIGEST from DEV Values
+      # 05. Read DEV Image DIGEST
       # ============================================================
       - name: Read image DIGEST from DEV
         working-directory: ${{ env.GITOPS_DIR }}
@@ -186,9 +187,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          # DEV_FILE_DIGEST="$(yq e '.image.digest' "$DEV_VALUES_FILE")"        # Gives error if value is not there
-
-          DEV_FILE_DIGEST="$(yq -r '.image.digest // ""' "$DEV_VALUES_FILE")"   # Reads empty value also
+          DEV_FILE_DIGEST="$(yq -r '.image.digest // ""' "$DEV_VALUES_FILE")"
 
           if [[ -z "$DEV_FILE_DIGEST" || "$DEV_FILE_DIGEST" == "null" ]]; then
             echo "::error::Could not read .image.digest from $DEV_VALUES_FILE"
@@ -211,7 +210,7 @@ jobs:
 
 
       # ============================================================
-      # 06. Read QA Image DIGEST from QA Values
+      # 06. Read QA Image DIGEST
       # ============================================================
       - name: Read image DIGEST from QA
         working-directory: ${{ env.GITOPS_DIR }}
@@ -219,73 +218,106 @@ jobs:
         run: |
           set -euo pipefail
 
-          # QA_FILE_DIGEST="$(yq e '.image.digest' "$QA_VALUES_FILE")"          # Gives error if value is not there
-
-          QA_FILE_DIGEST="$(yq -r '.image.digest // ""' "$QA_VALUES_FILE")"     # Reads empty values
+          QA_FILE_DIGEST="$(yq -r '.image.digest // ""' "$QA_VALUES_FILE")"
 
           if [[ -z "$QA_FILE_DIGEST" || "$QA_FILE_DIGEST" == "null" ]]; then
-            echo "Could not read .image.digest from $QA_VALUES_FILE"
-            echo "QA Digest value might be empty or null"
-            echo "Seems like first QA promotion...Continuing...!"
 
-            echo "QA_FILE_DIGEST=$QA_FILE_DIGEST" >> "$GITHUB_ENV"
-            exit 0
+            echo "=================================================="
+            echo "QA image information"
+            echo "=================================================="
+            echo "No QA image digest found."
+            echo "This appears to be the first QA promotion."
+            echo "Continuing..."
+
+            QA_FILE_DIGEST=""
+
+          else
+
+            if [[ ! "$QA_FILE_DIGEST" =~ ^sha256:[a-fA-F0-9]{64}$ ]]; then
+              echo "::error::Invalid QA image digest."
+              echo "Received: $QA_FILE_DIGEST"
+              exit 1
+            fi
+
+            echo "=================================================="
+            echo "QA image information"
+            echo "=================================================="
+            echo "Service: $SERVICE"
+            echo "QA image digest: $QA_FILE_DIGEST"
+
           fi
-
-          if [[ ! "$QA_FILE_DIGEST" =~ ^sha256:[a-fA-F0-9]{64}$ ]]; then
-            echo "::error::Invalid QA image digest."
-            echo "Received: $QA_FILE_DIGEST"
-            exit 1
-          fi
-
-          echo "=================================================="
-          echo "QA image information"
-          echo "=================================================="
-          echo "Service: $SERVICE"
-          echo "QA image digest: $QA_FILE_DIGEST"
 
           echo "QA_FILE_DIGEST=$QA_FILE_DIGEST" >> "$GITHUB_ENV"
 
 
       # ============================================================
-      # 07. Check equality of QA Image DIGEST and PROD Image DIGEST
+      # 07. Compare DEV and QA Image DIGEST
       # ============================================================
-      - name: Check equality of DEV Image DIGEST and QA Image DIGEST
+      - name: Compare DEV and QA image DIGEST
+        id: compare-digests
         shell: bash
         run: |
           set -euo pipefail
 
-          echo ""
-          echo "DEV File DIGEST: "
+          echo "=================================================="
+          echo "Comparing DEV and QA image digests"
+          echo "=================================================="
+
+          echo "DEV digest:"
           echo "$DEV_FILE_DIGEST"
 
-          if [[ -z "$QA_FILE_DIGEST" || "$QA_FILE_DIGEST" == "null" ]]; then
-             echo "Cannot compare DEV Digest with QA Digest"
-             echo "Because QA Digest is empty or null"
-             echo "Seems like first QA promotion...Continuing...!"
-             exit 0
-           else
-             echo ""
-             echo "QA File DIGEST: "
-             echo "$QA_FILE_DIGEST"
-           fi
-
-          
-          if [[ "$DEV_FILE_DIGEST" == $QA_FILE_DIGEST ]]; then
-            echo "=================================================="
-            echo "Image already promoted to QA"
-            echo "=================================================="
-            echo "DEV and QA contain the same image digest."
-            echo "Nothing to promote to QA."
-            
-            exit 1
+          echo ""
+          echo "QA digest:"
+          if [[ -n "$QA_FILE_DIGEST" ]]; then
+            echo "$QA_FILE_DIGEST"
+          else
+            echo "<empty>"
           fi
-       
+
+          # --------------------------------------------------------
+          # First QA promotion
+          # --------------------------------------------------------
+          if [[ -z "$QA_FILE_DIGEST" ]]; then
+
+            echo ""
+            echo "QA digest is empty."
+            echo "This is the first QA promotion."
+
+            echo "qa-already-current=false" >> "$GITHUB_OUTPUT"
+            exit 0
+
+          fi
+
+          # --------------------------------------------------------
+          # DEV and QA already contain exactly the same image
+          # --------------------------------------------------------
+          if [[ "$DEV_FILE_DIGEST" == "$QA_FILE_DIGEST" ]]; then
+
+            echo ""
+            echo "DEV and QA already contain the exact same digest."
+            echo "No image promotion is required."
+            echo "No GitOps PR update is required."
+
+            echo "qa-already-current=true" >> "$GITHUB_OUTPUT"
+            exit 0
+
+          fi
+
+          # --------------------------------------------------------
+          # DEV contains a newer/different digest
+          # --------------------------------------------------------
+          echo ""
+          echo "DEV and QA contain different image digests."
+          echo "QA promotion is required."
+
+          echo "qa-already-current=false" >> "$GITHUB_OUTPUT"
+
 
       # ============================================================
       # 08. Configure AWS using GitHub OIDC
       # ============================================================
       - name: Configure AWS credentials
+        if: steps.compare-digests.outputs.qa-already-current != 'true'
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ env.AWS_ECR_QA_PROMOTION_ROLE_ARN }}
@@ -296,6 +328,7 @@ jobs:
       # 09. Get AWS Account ID
       # ============================================================
       - name: Get AWS account ID
+        if: steps.compare-digests.outputs.qa-already-current != 'true'
         id: aws-account
         shell: bash
         run: |
@@ -316,10 +349,11 @@ jobs:
 
 
       # ============================================================
-      # 10. Verify helm DEV file image exists in ECR
+      # 10. Verify DEV GitOps digest exists in DEV ECR
       # ============================================================
-      - name: Verify helm DEV file image exists in ECR
-        id: check-file-digest-with-dev-ecr           
+      - name: Verify DEV GitOps digest exists in DEV ECR
+        if: steps.compare-digests.outputs.qa-already-current != 'true'
+        id: check-file-digest-with-dev-ecr
         shell: bash
         run: |
           set -euo pipefail
@@ -341,19 +375,22 @@ jobs:
             echo "matched-file-digest-with-dev-ecr=$DEV_FILE_DIGEST" >> "$GITHUB_OUTPUT"
 
           else
+
             echo "::error::DEV GitOps digest does not exist in DEV ECR."
             echo "Repository: $DEV_ECR_REPO"
             echo "Digest: $DEV_FILE_DIGEST"
             echo "::error::Promotion cancelled."
 
             exit 1
+
           fi
 
 
       # ============================================================
-      # 11. Find the original SHA tag from DEV
+      # 11. Find original SHA tag from DEV
       # ============================================================
       - name: Find DEV image tag
+        if: steps.compare-digests.outputs.qa-already-current != 'true'
         id: image-info
         shell: bash
         run: |
@@ -371,7 +408,13 @@ jobs:
           echo "DEV tags:"
           echo "$TAGS"
 
-          DEV_IMAGE_TAG="$(echo "$TAGS" | tr '\t' '\n' | grep '^sha-' | head -n 1 || true)"
+          DEV_IMAGE_TAG="$(
+            echo "$TAGS" |
+            tr '\t' '\n' |
+            grep '^sha-' |
+            head -n 1 ||
+            true
+          )"
 
           if [[ -z "$DEV_IMAGE_TAG" ]]; then
             echo "::error::No sha-* tag found for DEV digest."
@@ -380,24 +423,25 @@ jobs:
           fi
 
           echo ""
-          echo "Service: "
+          echo "Service:"
           echo "$SERVICE"
-          
+
           echo ""
-          echo "Selected DEV image tag: "
+          echo "Selected DEV image tag:"
           echo "$DEV_IMAGE_TAG"
-         
+
           echo ""
-          echo "Selected DEV image digest: "
+          echo "Selected DEV image digest:"
           echo "$MATCHED_FILE_DIGEST_WITH_DEV_ECR"
 
           echo "dev-image-tag=$DEV_IMAGE_TAG" >> "$GITHUB_OUTPUT"
 
 
       # ============================================================
-      # 12. Check whether the exact image already exists in QA ECR
+      # 12. Check whether exact image already exists in QA ECR
       # ============================================================
       - name: Check QA image
+        if: steps.compare-digests.outputs.qa-already-current != 'true'
         id: qa-ecr-check
         shell: bash
         env:
@@ -447,14 +491,15 @@ jobs:
               exit 1
             fi
 
+            echo ""
             echo "Exact image already exists in QA ECR."
-            echo "DEV ECR Digest: $MATCHED_FILE_DIGEST_WITH_DEV_ECR"
-            echo "QA ECR Digest:  $EXISTING_QA_DIGEST"
             echo "Image copy can be skipped."
 
             echo "qa-image-already-exists=true" >> "$GITHUB_OUTPUT"
             exit 0
+
           fi
+
 
           # --------------------------------------------------------
           # QA tag does not exist
@@ -466,10 +511,12 @@ jobs:
 
             echo "qa-image-already-exists=false" >> "$GITHUB_OUTPUT"
             exit 0
+
           fi
 
+
           # --------------------------------------------------------
-          # Any unexpected AWS error
+          # Unexpected AWS error
           # --------------------------------------------------------
           echo "::error::Failed to check QA ECR image."
           echo "$QA_LOOKUP"
@@ -488,11 +535,15 @@ jobs:
     needs:
       - Promote-Check-Job
 
-    if: needs.Promote-Check-Job.outputs.qa-image-already-exists != 'true'
+    if: |
+      needs.Promote-Check-Job.result == 'success' &&
+      needs.Promote-Check-Job.outputs.qa-already-current != 'true' &&
+      needs.Promote-Check-Job.outputs.qa-image-already-exists != 'true'
 
     outputs:
       is-dev-qa-ecr-digest-matched: ${{ steps.check-dev-qa-ecr-match.outputs.is-dev-qa-ecr-digest-matched }}
       matched-dev-qa-ecr-digest: ${{ steps.check-dev-qa-ecr-match.outputs.matched-dev-qa-ecr-digest }}
+
     steps:
 
       # ============================================================
@@ -529,7 +580,7 @@ jobs:
 
           crane version
 
-      
+
       # ============================================================
       # 03. Login Crane to ECR
       # ============================================================
@@ -547,9 +598,11 @@ jobs:
 
           aws ecr get-login-password \
             --region "$AWS_REGION" |
-            crane auth login "$REGISTRY" --username AWS --password-stdin
+            crane auth login "$REGISTRY" \
+              --username AWS \
+              --password-stdin
 
-              
+
       # ============================================================
       # 04. Promote exact digest DEV → QA
       # ============================================================
@@ -579,19 +632,23 @@ jobs:
           echo "$TARGET"
 
           echo ""
-          echo "Copying exact DEV digest with exact TAG to QA..."
-          echo "DEV ECR Tag: $DEV_IMAGE_TAG"
-          echo "DEV ECR Digest: $MATCHED_FILE_DIGEST_WITH_DEV_ECR"
-          
+          echo "Copying exact DEV digest with exact tag to QA..."
+
+          echo "DEV ECR Tag:"
+          echo "$DEV_IMAGE_TAG"
+
+          echo ""
+          echo "DEV ECR Digest:"
+          echo "$MATCHED_FILE_DIGEST_WITH_DEV_ECR"
+
           crane copy "$SOURCE" "$TARGET"
 
           echo ""
-          echo "Image promotion completed successfully from DEV → QA."
-          echo "Check your DEV ECR and QA ECR...!" 
+          echo "Image promotion completed successfully from DEV to QA."
 
 
       # ============================================================
-      # 05. Verify QA digest matches DEV digest (after copy)
+      # 05. Verify QA digest matches DEV digest
       # ============================================================
       - name: Verify QA digest matches DEV digest in ECR
         id: check-dev-qa-ecr-match
@@ -624,40 +681,40 @@ jobs:
           echo "$QA_DIGEST"
 
           if [[ "$QA_DIGEST" != "$MATCHED_FILE_DIGEST_WITH_DEV_ECR" ]]; then
+
             echo ""
-            echo "::error::Digest mismatch in DEV and QA !"
+            echo "::error::Digest mismatch between DEV and QA."
             exit 1
+
           fi
 
           echo ""
           echo "SUCCESS"
           echo "DEV and QA contain the exact same image digest."
+
           echo "DEV ECR Digest: $MATCHED_FILE_DIGEST_WITH_DEV_ECR"
           echo "QA ECR Digest : $QA_DIGEST"
 
           echo "is-dev-qa-ecr-digest-matched=true" >> "$GITHUB_OUTPUT"
-          echo "matched-dev-qa-ecr-digest=$MATCHED_FILE_DIGEST_WITH_DEV_ECR" >> "$GITHUB_OUTPUT"     
+          echo "matched-dev-qa-ecr-digest=$MATCHED_FILE_DIGEST_WITH_DEV_ECR" >> "$GITHUB_OUTPUT"
 
 
   # ================================================================
   # JOB 3
-  # Update GitOps and create/reuse promotion PR
+  # Update stable GitOps branch and create/reuse promotion PR
   # ================================================================
   Create-Pull-Request-Job:
-    name: Create QA Promotion PR
+    name: Create or Update QA Promotion PR
     runs-on: ${{ inputs.runner }}
 
     needs:
       - Promote-Check-Job
       - Promote-Dev-Image-Qa-Job
 
-    # Job 2 is skipped when the exact QA image already exists.
-    # This condition allows Job 3 to continue in both cases:
-    #   1. image was copied successfully
-    #   2. image already existed with the same digest
     if: |
       always() &&
       needs.Promote-Check-Job.result == 'success' &&
+      needs.Promote-Check-Job.outputs.qa-already-current != 'true' &&
       (
         needs.Promote-Dev-Image-Qa-Job.result == 'success' ||
         needs.Promote-Dev-Image-Qa-Job.result == 'skipped'
@@ -699,57 +756,33 @@ jobs:
 
 
       # ============================================================
-      # 03. Determine a Promotion branch
+      # 03. Determine stable promotion branch
       # ============================================================
-      #
-      # Full digest contains ":" which is not valid in a Git
-      # branch name.
-      #
-      # Full digest is still used in:
-      #   - QA values file
-      #   - commit message
-      #   - PR title/body
-      #
-      # Short digest is used only for the branch name.
-      # --------------------------------------------------------
-
       - name: Determine promotion branch
         id: branch-info
         shell: bash
         run: |
-
           set -euo pipefail
 
           echo "=================================================="
-          echo "Determining promotion branch"
+          echo "Determining stable promotion branch"
           echo "=================================================="
-
-          DEV_IMAGE_DIGEST="${{ needs.Promote-Check-Job.outputs.matched-file-digest-with-dev-ecr }}"
-
-          DIGEST_HEX="${DEV_IMAGE_DIGEST#sha256:}"
-
-          DIGEST_SHORT="${DIGEST_HEX:0:12}"
-
-          # BRANCH="promote/${SERVICE}-dev-to-qa-${DIGEST_SHORT}"
 
           BRANCH="promote/${SERVICE}-dev-to-qa"
 
-          echo "Full DEV digest:"
-          echo "$DEV_IMAGE_DIGEST"
+          echo "Service:"
+          echo "$SERVICE"
 
           echo ""
-          echo "Short digest:"
-          echo "$DIGEST_SHORT"
-
-          echo ""
-          echo "Promotion branch:"
+          echo "Stable promotion branch:"
           echo "$BRANCH"
 
           echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
 
       # ============================================================
-      # 04. Check whether an open PR already exists
+      # 04. Check whether an open promotion PR already exists
       # ============================================================
       - name: Check for existing promotion PR
         id: existing-pr
@@ -757,12 +790,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
         shell: bash
         run: |
-
           set -euo pipefail
 
-          echo "--------------------------------------------------"
+          echo "=================================================="
           echo "Checking for existing QA promotion PR"
-          echo "--------------------------------------------------"
+          echo "=================================================="
 
           EXISTING_PR_URL="$(
             gh pr list \
@@ -777,38 +809,58 @@ jobs:
           if [[ -n "$EXISTING_PR_URL" ]]; then
 
             echo ""
-            echo "QA promotion PR already exists:"
+            echo "Existing open QA promotion PR found:"
             echo "$EXISTING_PR_URL"
 
             echo "existing=true" >> "$GITHUB_OUTPUT"
+            echo "url=$EXISTING_PR_URL" >> "$GITHUB_OUTPUT"
 
           else
 
-            echo "No existing QA promotion PR found."
+            echo ""
+            echo "No open QA promotion PR found."
 
             echo "existing=false" >> "$GITHUB_OUTPUT"
 
           fi
 
-      
-      # ============================================================
-      # 05. Create or reuse promotion branch
-      # ============================================================
-      - name: Create or reuse promotion branch
-        if: steps.existing-pr.outputs.existing != 'true'
-        shell: bash
-        working-directory: ${{ env.GITOPS_DIR }}
-        run: |
 
+      # ============================================================
+      # 05. Prepare stable promotion branch
+      #
+      # Case A:
+      #   Existing OPEN PR
+      #   → checkout existing branch
+      #
+      # Case B:
+      #   No OPEN PR but branch exists
+      #   → remove stale branch and recreate from main
+      #
+      # Case C:
+      #   No OPEN PR and no branch
+      #   → create new branch from main
+      # ============================================================
+      - name: Prepare stable promotion branch
+        working-directory: ${{ env.GITOPS_DIR }}
+        shell: bash
+        env:
+          EXISTING_PR: ${{ steps.existing-pr.outputs.existing }}
+        run: |
           set -euo pipefail
 
-          echo "--------------------------------------------------"
-          echo "Creating or reusing promotion branch"
-          echo "--------------------------------------------------"
+          echo "=================================================="
+          echo "Preparing stable promotion branch"
+          echo "=================================================="
 
-          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+          git fetch origin main
 
-            echo "Promotion branch already exists on remote:"
+          # --------------------------------------------------------
+          # Existing OPEN PR
+          # --------------------------------------------------------
+          if [[ "$EXISTING_PR" == "true" ]]; then
+
+            echo "An open promotion PR already exists."
+            echo "Reusing the existing branch:"
             echo "$BRANCH"
 
             git fetch origin "$BRANCH"
@@ -817,12 +869,26 @@ jobs:
 
           else
 
-            echo "Promotion branch does not exist."
+            # ------------------------------------------------------
+            # No open PR.
+            #
+            # Check whether an old branch remains on the remote.
+            # ------------------------------------------------------
+            if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
 
-            echo "Creating new branch:"
+              echo "A stale promotion branch exists without an open PR."
+              echo "Removing stale branch:"
+              echo "$BRANCH"
+
+              git push origin --delete "$BRANCH"
+
+            fi
+
+            echo ""
+            echo "Creating fresh promotion branch from origin/main:"
             echo "$BRANCH"
 
-            git checkout -b "$BRANCH"
+            git checkout -b "$BRANCH" "origin/main"
 
           fi
 
@@ -830,87 +896,86 @@ jobs:
           echo "Current branch:"
           git branch --show-current
 
+          echo ""
+          echo "Current commit:"
+          git rev-parse --short HEAD
+
 
       # ============================================================
       # 06. Update QA image digest
       # ============================================================
       - name: Update QA image digest
         id: update-qa-digest
-        if: steps.existing-pr.outputs.existing != 'true'
-        shell: bash
         working-directory: ${{ env.GITOPS_DIR }}
         env:
           DEV_IMAGE_DIGEST: ${{ needs.Promote-Check-Job.outputs.matched-file-digest-with-dev-ecr }}
         run: |
-
           set -euo pipefail
 
-          echo "--------------------------------------------------"
+          echo "=================================================="
           echo "Updating QA image digest"
-          echo "--------------------------------------------------"
+          echo "=================================================="
 
           if [[ ! -f "$QA_VALUES_FILE" ]]; then
             echo "::error::QA values file not found: $QA_VALUES_FILE"
             exit 1
           fi
 
-          echo ""
-          echo "QA values file: $QA_VALUES_FILE"
+          echo "QA values file:"
+          echo "$QA_VALUES_FILE"
 
           CURRENT_QA_DIGEST="$(yq -r '.image.digest // ""' "$QA_VALUES_FILE")"
 
-          if [[ -z "$CURRENT_QA_DIGEST" || "$CURRENT_QA_DIGEST" == "null" ]]; then
-          
-            echo "No QA Digest found"
-            echo "Seems like first QA promotion...Continuing...!"
-            
-          else
-          
-            echo ""
-            echo "Current QA Image Digest: "
+          echo ""
+          echo "Current QA image digest:"
+          if [[ -n "$CURRENT_QA_DIGEST" ]]; then
             echo "$CURRENT_QA_DIGEST"
+          else
+            echo "<empty>"
+          fi
+
+          echo ""
+          echo "New DEV image digest:"
+          echo "$DEV_IMAGE_DIGEST"
+
+          # --------------------------------------------------------
+          # Already current
+          # --------------------------------------------------------
+          if [[ "$CURRENT_QA_DIGEST" == "$DEV_IMAGE_DIGEST" ]]; then
 
             echo ""
-            echo "New QA image digest: "
-            echo "$DEV_IMAGE_DIGEST"
-          
-            if [[ "$CURRENT_QA_DIGEST" == "$DEV_IMAGE_DIGEST" ]]; then
-          
-              echo ""
-              echo "Both Current QA image Digest and New QA image Digest are exactly same..."
-              echo "No update is required...skipping update...!"
+            echo "QA already contains the requested digest."
+            echo "No file update is required."
 
-              exit 0     # Jumps to next GH Actions step, will not execute subsequent commands in the current step
-
-            fi
+            exit 0
 
           fi
-          
+
+          # --------------------------------------------------------
+          # Update QA digest
+          # --------------------------------------------------------
           yq -i \
-          '.image.digest = strenv(DEV_IMAGE_DIGEST)' \
-          "$QA_VALUES_FILE"
+            '.image.digest = strenv(DEV_IMAGE_DIGEST)' \
+            "$QA_VALUES_FILE"
 
           echo ""
           echo "Updated QA image digest:"
-
           yq -r '.image.digest' "$QA_VALUES_FILE"
-          
+
 
       # ============================================================
       # 07. Show Git diff
       # ============================================================
       - name: Check Git diff
         id: git-diff
-        if: steps.existing-pr.outputs.existing != 'true'
-        shell: bash
         working-directory: ${{ env.GITOPS_DIR }}
+        shell: bash
         run: |
-
           set -euo pipefail
 
-          echo "--------------------------------------------------"
+          echo "=================================================="
           echo "Checking Git diff"
-          echo "--------------------------------------------------"
+          echo "=================================================="
 
           git status --short
 
@@ -943,16 +1008,13 @@ jobs:
       # 08. Commit QA values update
       # ============================================================
       - name: Commit QA values update
-        if: |
-          steps.existing-pr.outputs.existing != 'true' &&
-          steps.git-diff.outputs.changed == 'true'
-        shell: bash
+        if: steps.git-diff.outputs.changed == 'true'
         working-directory: ${{ env.GITOPS_DIR }}
+        shell: bash
+        env:
+          DEV_IMAGE_DIGEST: ${{ needs.Promote-Check-Job.outputs.matched-file-digest-with-dev-ecr }}
         run: |
-
           set -euo pipefail
-
-          DEV_IMAGE_DIGEST="${{ needs.Promote-Check-Job.outputs.matched-file-digest-with-dev-ecr }}"
 
           echo "=================================================="
           echo "Committing QA promotion"
@@ -972,90 +1034,96 @@ jobs:
 
 
       # ============================================================
-      # 09. Push promotion branch
+      # 09. Push stable promotion branch
       # ============================================================
       - name: Push promotion branch
-        if: |
-          steps.existing-pr.outputs.existing != 'true' &&
-          steps.git-diff.outputs.changed == 'true'
-        shell: bash
+        if: steps.git-diff.outputs.changed == 'true'
         working-directory: ${{ env.GITOPS_DIR }}
+        shell: bash
         run: |
-
           set -euo pipefail
 
-          echo "--------------------------------------------------"
-          echo "Pushing promotion branch"
-          echo "--------------------------------------------------"
+          echo "=================================================="
+          echo "Pushing stable promotion branch"
+          echo "=================================================="
 
-          git push --set-upstream origin "$BRANCH"
+          git push \
+            --set-upstream \
+            origin \
+            "$BRANCH"
 
           echo ""
           echo "Promotion branch pushed:"
           echo "$BRANCH"
-          
+
 
       # ============================================================
-      # 10. Create Pull Request
+      # 10. Create Pull Request if one does not already exist
       # ============================================================
       - name: Create Pull Request
-        shell: bash
-        
         if: |
           steps.existing-pr.outputs.existing != 'true' &&
           steps.git-diff.outputs.changed == 'true'
-
         env:
           GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
+
           DEV_IMAGE_DIGEST: ${{ needs.Promote-Check-Job.outputs.matched-file-digest-with-dev-ecr }}
           DEV_IMAGE_TAG: ${{ needs.Promote-Check-Job.outputs.dev-image-tag }}
-        
+
           ACTOR: ${{ github.actor }}
           REF_NAME: ${{ github.ref_name }}
           SERVER_URL: ${{ github.server_url }}
           REPOSITORY: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
-
+        shell: bash
         run: |
           set -euo pipefail
-          
+
           echo "=================================================="
           echo "Creating new QA promotion PR"
           echo "=================================================="
-          
+
           PR_TITLE="promote(${SERVICE}): DEV → QA"
 
           PR_BODY="$(cat <<EOF
-
           ## QA Image Promotion
 
-          Service:             \`${SERVICE}\`
+          Service: \`${SERVICE}\`
 
-          Actor:               \`${ACTOR}\`
+          Actor: \`${ACTOR}\`
 
           Source workflow ref: \`${REF_NAME}\`
 
-          Promotion branch:    \`${BRANCH}\`
+          Promotion branch: \`${BRANCH}\`
 
-          DEV repository:      \`${DEV_ECR_REPO}\`
+          DEV repository: \`${DEV_ECR_REPO}\`
 
-          QA repository:       \`${QA_ECR_REPO}\`
+          QA repository: \`${QA_ECR_REPO}\`
 
-          Image tag:           \`${DEV_IMAGE_TAG}\`
+          Image tag: \`${DEV_IMAGE_TAG}\`
 
-          Image digest:        \`${DEV_IMAGE_DIGEST}\`
+          Image digest: \`${DEV_IMAGE_DIGEST}\`
 
           Workflow run:
           ${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}
 
           ## Promotion
 
-          \`**DEV → QA**\`
+          **DEV → QA**
+
+          ## Promotion Model
+
+          This PR uses a stable service-specific promotion branch:
+
+          \`${BRANCH}\`
+
+          If a newer DEV image is promoted while this PR remains open,
+          this same branch and PR will be updated with the newer immutable digest.
 
           ## Verification
 
           - No image rebuild performed.
-          - DEV image exists in ECR.
+          - DEV GitOps digest exists in DEV ECR.
           - Exact DEV digest copied to QA, or exact digest was already present in QA.
           - QA digest verified to match DEV digest.
           - QA GitOps values updated with the same immutable digest.
@@ -1072,7 +1140,7 @@ jobs:
           After merge, Argo CD will deploy the image to QA.
           EOF
           )"
-          
+
           PR_URL="$(
             gh pr create \
               --repo "${GITOPS_OWNER}/${GITOPS_REPO}" \
@@ -1081,8 +1149,141 @@ jobs:
               --title "$PR_TITLE" \
               --body "$PR_BODY"
           )"
-          
+
           echo ""
-          echo "QA promotion Pull Request created successfully"
+          echo "QA promotion Pull Request created successfully:"
           echo "$PR_URL"
-          
+
+
+      # ============================================================
+      # 11. Update Existing Pull Request
+      # ============================================================
+      #
+      # When an open PR already exists:
+      #
+      #   - The stable branch has already been updated.
+      #   - The existing PR must NOT be recreated.
+      #   - Update the existing PR body with the latest digest.
+      # ============================================================
+      - name: Update Existing Pull Request
+        if: |
+          steps.existing-pr.outputs.existing == 'true' &&
+          steps.git-diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
+
+          EXISTING_PR_URL: ${{ steps.existing-pr.outputs.url }}
+
+          DEV_IMAGE_DIGEST: ${{ needs.Promote-Check-Job.outputs.matched-file-digest-with-dev-ecr }}
+          DEV_IMAGE_TAG: ${{ needs.Promote-Check-Job.outputs.dev-image-tag }}
+
+          ACTOR: ${{ github.actor }}
+          REF_NAME: ${{ github.ref_name }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=================================================="
+          echo "Updating existing QA promotion PR"
+          echo "=================================================="
+
+          echo "Existing PR:"
+          echo "$EXISTING_PR_URL"
+
+          echo ""
+          echo "Latest DEV image tag:"
+          echo "$DEV_IMAGE_TAG"
+
+          echo ""
+          echo "Latest DEV image digest:"
+          echo "$DEV_IMAGE_DIGEST"
+
+          PR_TITLE="promote(${SERVICE}): DEV → QA"
+
+          PR_BODY="$(cat <<EOF
+          ## QA Image Promotion
+
+          Service: \`${SERVICE}\`
+
+          Actor: \`${ACTOR}\`
+
+          Source workflow ref: \`${REF_NAME}\`
+
+          Promotion branch: \`${BRANCH}\`
+
+          DEV repository: \`${DEV_ECR_REPO}\`
+
+          QA repository: \`${QA_ECR_REPO}\`
+
+          Image tag: \`${DEV_IMAGE_TAG}\`
+
+          Image digest: \`${DEV_IMAGE_DIGEST}\`
+
+          Latest promotion workflow run:
+          ${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}
+
+          ## Promotion
+
+          **DEV → QA**
+
+          ## Promotion Model
+
+          This PR uses a stable service-specific promotion branch:
+
+          \`${BRANCH}\`
+
+          If a newer DEV image is promoted while this PR remains open,
+          the same branch and PR are updated with the newer immutable digest.
+
+          ## Current Promoted Image
+
+          The image currently represented by this PR is:
+
+          - Image tag: \`${DEV_IMAGE_TAG}\`
+          - Image digest: \`${DEV_IMAGE_DIGEST}\`
+
+          No image rebuild is performed during promotion.
+
+          ## Verification
+
+          - DEV GitOps digest exists in DEV ECR.
+          - Exact DEV digest copied to QA, or exact digest was already present in QA.
+          - QA digest verified to match DEV digest.
+          - QA GitOps values updated with the same immutable digest.
+          - No image rebuild performed.
+
+          ## QA Security
+
+          After this PR is opened or updated, required GitOps CI checks must pass:
+
+          - Helm validation
+          - Trivy configuration scan
+          - Kubeconform
+          - Kyverno CLI validation
+
+          After merge, Argo CD will deploy the image to QA.
+          EOF
+          )"
+
+          echo ""
+          echo "Updating PR title and body..."
+
+          gh pr edit "$EXISTING_PR_URL" \
+            --title "$PR_TITLE" \
+            --body "$PR_BODY"
+
+          echo ""
+          echo "=================================================="
+          echo "Existing QA promotion PR updated successfully"
+          echo "=================================================="
+
+          echo "PR:"
+          echo "$EXISTING_PR_URL"
+
+          echo ""
+          echo "Latest image digest:"
+          echo "$DEV_IMAGE_DIGEST"
