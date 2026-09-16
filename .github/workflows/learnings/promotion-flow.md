@@ -74,4 +74,13 @@ Image C → same branch → PR #1 updated to C
 ```text
 Image D → same stable branch recreated from main → PR #2
 ```
+```text
+┌─────────────────────────────────────────┐
+│ promote/backend-dev-to-qa               │
+│                                         │
+│ Always based on latest main             │
+│ +                                       │
+│ Latest DEV → QA promotion               │
+└─────────────────────────────────────────┘
+```
 
