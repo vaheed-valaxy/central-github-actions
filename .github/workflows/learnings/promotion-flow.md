@@ -39,3 +39,14 @@
                       ▼
           Create PR only if needed
 ```
+**If PR #1 is still open:**  
+```text
+Image A → PR #1
+Image B → same branch → PR #1 updated to B
+Image C → same branch → PR #1 updated to C
+```
+
+**If PR #1 has already been merged:**  
+```text
+Image D → same stable branch recreated from main → PR #2
+```
