@@ -1156,28 +1156,134 @@ jobs:
 
 
       # ============================================================
-      # 11. Report existing/updated PR
+      # 11. Update Existing Pull Request
       # ============================================================
-      - name: Report promotion PR
-        if: steps.existing-pr.outputs.existing == 'true'
+      #
+      # When an open PR already exists:
+      #
+      #   - The stable branch has already been updated.
+      #   - The existing PR must NOT be recreated.
+      #   - Update the existing PR body with the latest digest.
+      # ============================================================
+      - name: Update Existing Pull Request
+        if: |
+          steps.existing-pr.outputs.existing == 'true' &&
+          steps.git-diff.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
+
+          EXISTING_PR_URL: ${{ steps.existing-pr.outputs.url }}
+
+          DEV_IMAGE_DIGEST: ${{ needs.Promote-Check-Job.outputs.matched-file-digest-with-dev-ecr }}
+          DEV_IMAGE_TAG: ${{ needs.Promote-Check-Job.outputs.dev-image-tag }}
+
+          ACTOR: ${{ github.actor }}
+          REF_NAME: ${{ github.ref_name }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+
         shell: bash
         run: |
           set -euo pipefail
 
-          PR_URL="${{ steps.existing-pr.outputs.url }}"
-
           echo "=================================================="
-          echo "Existing QA promotion PR updated"
+          echo "Updating existing QA promotion PR"
+          echo "=================================================="
+
+          echo "Existing PR:"
+          echo "$EXISTING_PR_URL"
+
+          echo ""
+          echo "Latest DEV image tag:"
+          echo "$DEV_IMAGE_TAG"
+
+          echo ""
+          echo "Latest DEV image digest:"
+          echo "$DEV_IMAGE_DIGEST"
+
+          PR_TITLE="promote(${SERVICE}): DEV → QA"
+
+          PR_BODY="$(cat <<EOF
+          ## QA Image Promotion
+
+          Service: \`${SERVICE}\`
+
+          Actor: \`${ACTOR}\`
+
+          Source workflow ref: \`${REF_NAME}\`
+
+          Promotion branch: \`${BRANCH}\`
+
+          DEV repository: \`${DEV_ECR_REPO}\`
+
+          QA repository: \`${QA_ECR_REPO}\`
+
+          Image tag: \`${DEV_IMAGE_TAG}\`
+
+          Image digest: \`${DEV_IMAGE_DIGEST}\`
+
+          Latest promotion workflow run:
+          ${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}
+
+          ## Promotion
+
+          **DEV → QA**
+
+          ## Promotion Model
+
+          This PR uses a stable service-specific promotion branch:
+
+          \`${BRANCH}\`
+
+          If a newer DEV image is promoted while this PR remains open,
+          the same branch and PR are updated with the newer immutable digest.
+
+          ## Current Promoted Image
+
+          The image currently represented by this PR is:
+
+          - Image tag: \`${DEV_IMAGE_TAG}\`
+          - Image digest: \`${DEV_IMAGE_DIGEST}\`
+
+          No image rebuild is performed during promotion.
+
+          ## Verification
+
+          - DEV GitOps digest exists in DEV ECR.
+          - Exact DEV digest copied to QA, or exact digest was already present in QA.
+          - QA digest verified to match DEV digest.
+          - QA GitOps values updated with the same immutable digest.
+          - No image rebuild performed.
+
+          ## QA Security
+
+          After this PR is opened or updated, required GitOps CI checks must pass:
+
+          - Helm validation
+          - Trivy configuration scan
+          - Kubeconform
+          - Kyverno CLI validation
+
+          After merge, Argo CD will deploy the image to QA.
+          EOF
+          )"
+
+          echo ""
+          echo "Updating PR title and body..."
+
+          gh pr edit "$EXISTING_PR_URL" \
+            --title "$PR_TITLE" \
+            --body "$PR_BODY"
+
+          echo ""
+          echo "=================================================="
+          echo "Existing QA promotion PR updated successfully"
           echo "=================================================="
 
           echo "PR:"
-          echo "$PR_URL"
+          echo "$EXISTING_PR_URL"
 
           echo ""
-          echo "Stable promotion branch:"
-          echo "$BRANCH"
-
-          echo ""
-          echo "The existing PR now contains the latest DEV image digest."
+          echo "Latest image digest:"
+          echo "$DEV_IMAGE_DIGEST"
