@@ -37,7 +37,17 @@
                   Push branch
                       │
                       ▼
-          Create PR only if needed
+               ┌──────┴──────┐
+               │             │
+         No existing PR   Existing PR
+               │             │
+               ▼             ▼
+          gh pr create   gh pr edit
+               │             │
+               └──────┬──────┘
+                      ▼
+               Same stable PR
+         
 ```
 **If PR #1 is still open:**  
 ```text
