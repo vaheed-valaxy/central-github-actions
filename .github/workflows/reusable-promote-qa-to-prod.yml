@@ -692,7 +692,9 @@ jobs:
           echo "SUCCESS"
           echo "QA and PROD contain the exact same image digest."
 
-          echo "QA ECR Digest: $MATCHED_FILE_DIGEST_WITH_QA_ECR"
+          echo "After Promotion..."
+          echo ""
+          echo "QA ECR Digest   : $MATCHED_FILE_DIGEST_WITH_QA_ECR"
           echo "PROD ECR Digest : $PROD_DIGEST"
 
           echo "is-qa-prod-ecr-digest-matched=true" >> "$GITHUB_OUTPUT"
