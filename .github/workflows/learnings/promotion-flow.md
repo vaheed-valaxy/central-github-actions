@@ -49,6 +49,20 @@
                Same stable PR
          
 ```
+```text
+One service
+    ↓
+One stable branch
+    ↓
+One open PR
+    ↓
+New DEV image
+    ↓
+Update same branch
+    ↓
+Update same PR
+```
+
 **If PR #1 is still open:**  
 ```text
 Image A → PR #1
@@ -60,3 +74,4 @@ Image C → same branch → PR #1 updated to C
 ```text
 Image D → same stable branch recreated from main → PR #2
 ```
+
