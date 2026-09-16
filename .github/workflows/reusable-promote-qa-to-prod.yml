@@ -408,7 +408,7 @@ jobs:
           echo "QA tags:"
           echo "$TAGS"
 
-          DEV_IMAGE_TAG="$(
+          QA_IMAGE_TAG="$(
             echo "$TAGS" |
             tr '\t' '\n' |
             grep '^sha-' |
