@@ -696,7 +696,7 @@ jobs:
           echo "PROD ECR Digest : $PROD_DIGEST"
 
           echo "is-qa-prod-ecr-digest-matched=true" >> "$GITHUB_OUTPUT"
-          echo "matched-qa-prod-ecr-digest=$MATCHED_FILE_DIGEST_WITH_DEV_ECR" >> "$GITHUB_OUTPUT"
+          echo "matched-qa-prod-ecr-digest=$MATCHED_FILE_DIGEST_WITH_QA_ECR" >> "$GITHUB_OUTPUT"
 
 
   # ================================================================
