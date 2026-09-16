@@ -782,9 +782,9 @@ jobs:
 
 
       # ============================================================
-      # 04. Check whether an open promotion PR already exists
+      # 04. Check whether an open QA promotion PR already exists
       # ============================================================
-      - name: Check for existing promotion PR
+      - name: Check for existing QA promotion PR
         id: existing-pr
         env:
           GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
