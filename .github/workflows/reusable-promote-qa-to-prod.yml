@@ -1252,7 +1252,7 @@ jobs:
 
           ## Verification
 
-          - QA GitOps digest exists in DEV ECR.
+          - QA GitOps digest exists in QA ECR.
           - Exact QA digest copied to PROD, or exact digest was already present in PROD.
           - PROD digest verified to match QA digest.
           - PROD GitOps values updated with the same immutable digest.
