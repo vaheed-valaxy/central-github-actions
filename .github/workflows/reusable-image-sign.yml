@@ -140,11 +140,11 @@ jobs:
               cat /tmp/cosign-verify-error.log
             fi
           fi
-
-          
-      # ------------------------------------
-      # TEMPORARY OIDC DEBUG - DELETE LATER
-      # ------------------------------------
+         
+         
+      # ------------------------------------------------------------
+      # TEMPORARY - DELETE AFTER OIDC DEBUGGING
+      # ------------------------------------------------------------
       - name: Debug signing OIDC claims
         shell: bash
         run: |
@@ -169,42 +169,32 @@ jobs:
             exit 1
           fi
 
-          python3 - "$OIDC_TOKEN" <<'PY'
-import base64
-import json
-import sys
+          PAYLOAD="$(
+            echo "$OIDC_TOKEN" |
+            cut -d '.' -f 2 |
+            tr '_-' '/+' |
+            awk '{
+              printf "%s", $0
+              n=length($0)%4
+              if (n==2) printf "=="
+              else if (n==3) printf "="
+            }' |
+            base64 --decode
+          )"
 
-token = sys.argv[1]
-
-payload = token.split(".")[1]
-payload += "=" * (-len(payload) % 4)
-
-claims = json.loads(
-    base64.urlsafe_b64decode(payload)
-)
-
-for key in [
-    "iss",
-    "sub",
-    "aud",
-    "repository",
-    "repository_owner",
-    "workflow",
-    "workflow_ref",
-    "job_workflow_ref",
-    "ref",
-    "ref_type",
-    "actor"
-]:
-    print(f"{key}: {claims.get(key)}")
-PY
-      
-            
-
-          
-            
-         
-
+          echo "$PAYLOAD" | jq -r '
+            "iss: \(.iss)",
+            "sub: \(.sub)",
+            "aud: \(.aud)",
+            "repository: \(.repository)",
+            "repository_owner: \(.repository_owner)",
+            "workflow: \(.workflow)",
+            "workflow_ref: \(.workflow_ref)",
+            "job_workflow_ref: \(.job_workflow_ref)",
+            "ref: \(.ref)",
+            "ref_type: \(.ref_type)",
+            "actor: \(.actor)"
+          '
           
       # ------------------------------------------------------------
       # 8. Sign only when the required signature does not exist
