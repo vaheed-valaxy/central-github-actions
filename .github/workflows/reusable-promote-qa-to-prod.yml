@@ -858,8 +858,6 @@ jobs:
 
       aws-ecr-role-arn: ${{ inputs.aws-ecr-prod-promotion-role-arn }}
 
-      cosign-certificate-identity-regexp: ${{ inputs.cosign-certificate-identity-regexp }}
-
       cosign-sbom-attestation-certificate-identity-regexp: ${{ inputs.cosign-sbom-attestation-certificate-identity-regexp }}
 
       cosign-oidc-issuer: ${{ inputs.cosign-oidc-issuer }}
