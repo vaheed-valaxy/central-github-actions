@@ -141,55 +141,6 @@ jobs:
             fi
           fi
          
-
-
-
-
-
-      # ------------------------------------------------------------
-      # TEMPORARY OIDC DEBUG - DELETE AFTER DEBUGGING
-      # ------------------------------------------------------------
-      - name: Debug signing OIDC claims
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "=================================================="
-          echo "OIDC claims used by Cosign signing workflow"
-          echo "=================================================="
-
-          echo "OIDC issuer:"
-          echo "$ACTIONS_ID_TOKEN_REQUEST_URL"
-
-          echo
-          echo "Requesting OIDC token..."
-
-          OIDC_TOKEN=$(curl \
-            --fail \
-            --silent \
-            --show-error \
-            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL" \
-            | jq -r '.value')
-
-          if [[ -z "$OIDC_TOKEN" || "$OIDC_TOKEN" == "null" ]]; then
-            echo "::error::Failed to obtain GitHub OIDC token."
-            exit 1
-          fi
-
-          echo "OIDC token obtained successfully."
-          echo
-
-          echo "JWT header:"
-          echo "$OIDC_TOKEN" | cut -d '.' -f 1 | base64 -d 2>/dev/null | jq .
-
-          echo
-          echo "JWT payload:"
-          echo "$OIDC_TOKEN" | cut -d '.' -f 2 | base64 -d 2>/dev/null | jq .
-
-
-
-
           
       # ------------------------------------------------------------
       # 8. Sign only when the required signature does not exist
@@ -209,9 +160,10 @@ jobs:
 
           echo "Image signing completed."
 
-      # --------------------
-      # This should be deleted later
-      # ----------------------
+
+      # ------------------------------------------------------------
+      # 9. Verify final state
+      # ------------------------------------------------------------
       - name: Verify final Cosign signature
         shell: bash
         run: |
@@ -220,28 +172,11 @@ jobs:
           IMAGE="${{ inputs.image-with-digest }}"
 
           echo "Verifying final signature state..."
-          
+
           cosign verify \
-            --certificate-identity-regexp='^https://github\.com/.*$' \
-            --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
-            "$IMAGE"
+            --certificate-identity-regexp="${{ inputs.cosign-certificate-identity-regexp }}" \
+            --certificate-oidc-issuer="${{ inputs.cosign-oidc-issuer }}" \
+            "$IMAGE" >/dev/null
 
-      # ------------------------------------------------------------
-      # 9. Verify final state
-      # ------------------------------------------------------------
-      # - name: Verify final Cosign signature
-      #   shell: bash
-      #   run: |
-      #     set -euo pipefail
-
-      #     IMAGE="${{ inputs.image-with-digest }}"
-
-      #     echo "Verifying final signature state..."
-
-      #     cosign verify \
-      #       --certificate-identity-regexp="${{ inputs.cosign-certificate-identity-regexp }}" \
-      #       --certificate-oidc-issuer="${{ inputs.cosign-oidc-issuer }}" \
-      #       "$IMAGE" >/dev/null
-
-      #     echo "Valid Cosign signature confirmed for:"
-      #     echo "$IMAGE"
+          echo "Valid Cosign signature confirmed for:"
+          echo "$IMAGE"
