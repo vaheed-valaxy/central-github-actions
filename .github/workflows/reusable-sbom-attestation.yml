@@ -1,4 +1,4 @@
-name: Reusable - SBOM
+name: Reusable - SBOM Attestation
 
 on:
   workflow_call:
@@ -16,7 +16,7 @@ on:
         default: ubuntu-latest
 
       image-with-digest:
-        description: "Complete image reference with digest"
+        description: "Complete PROD ECR image reference with digest"
         required: true
         type: string
 
@@ -26,14 +26,26 @@ on:
         type: string
 
       aws-ecr-role-arn:
-        description: "Complete AWS ECR Role ARN"
+        description: "AWS IAM role used to access PROD ECR"
         required: true
         type: string
+
+      cosign-certificate-identity-regexp:
+        description: "Expected Sigstore certificate identity regexp"
+        required: true
+        type: string
+
+      cosign-oidc-issuer:
+        description: "Expected OIDC issuer for keyless Cosign attestation"
+        required: false
+        type: string
+        default: https://token.actions.githubusercontent.com
+
 
 jobs:
 
   Generate-Attest-SBOM:
-    name: Generate and Attest SBOM
+    name: Generate and Attest CycloneDX SBOM
     runs-on: ${{ inputs.runner }}
 
     permissions:
@@ -42,59 +54,99 @@ jobs:
 
     steps:
 
-      # ============================================================
-      # 01. Configure AWS credentials
-      # ============================================================
+      # ------------------------------------------------------------
+      # 1. Verify AWS CLI
+      # ------------------------------------------------------------
+      - name: Verify AWS CLI
+        run: |
+          aws --version
+
+      # ------------------------------------------------------------
+      # 2. Configure AWS credentials
+      # ------------------------------------------------------------
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ inputs.aws-ecr-role-arn }}
           aws-region: ${{ inputs.aws-region }}
 
-      # ============================================================
-      # 02. Verify AWS identity
-      # ============================================================
+      # ------------------------------------------------------------
+      # 3. Verify AWS identity
+      # ------------------------------------------------------------
       - name: Verify AWS identity
-        shell: bash
         run: |
-          set -euo pipefail
-
           aws sts get-caller-identity
 
-      # ============================================================
-      # 03. Login to Amazon ECR
-      # ============================================================
+      # ------------------------------------------------------------
+      # 4. Login to PROD ECR
+      # ------------------------------------------------------------
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # ============================================================
-      # 04. Verify image reference
-      # ============================================================
-      - name: Verify image reference
+      # ------------------------------------------------------------
+      # 5. Install Cosign
+      # ------------------------------------------------------------
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      # ------------------------------------------------------------
+      # 6. Display attestation information
+      # ------------------------------------------------------------
+      - name: Display attestation information
+        run: |
+          echo "Service:"
+          echo "${{ inputs.service-name }}"
+
+          echo "Image:"
+          echo "${{ inputs.image-with-digest }}"
+
+          echo "Expected certificate identity:"
+          echo "${{ inputs.cosign-certificate-identity-regexp }}"
+
+          echo "Expected OIDC issuer:"
+          echo "${{ inputs.cosign-oidc-issuer }}"
+
+      # ------------------------------------------------------------
+      # 7. Check whether a valid CycloneDX attestation exists
+      # ------------------------------------------------------------
+      - name: Check existing CycloneDX attestation
+        id: verify-attestation
         shell: bash
         run: |
           set -euo pipefail
 
-          echo "=================================================="
-          echo "PROD Image SBOM"
-          echo "=================================================="
+          IMAGE="${{ inputs.image-with-digest }}"
 
-          echo "Service:"
-          echo "${{ inputs.service-name }}"
+          echo "Checking for an existing valid CycloneDX attestation..."
+          echo "Image: $IMAGE"
 
-          echo ""
-          echo "Image:"
-          echo "${{ inputs.image-with-digest }}"
+          if cosign verify-attestation \
+            --type cyclonedx \
+            --certificate-identity-regexp="${{ inputs.cosign-certificate-identity-regexp }}" \
+            --certificate-oidc-issuer="${{ inputs.cosign-oidc-issuer }}" \
+            "$IMAGE" >/tmp/cosign-attestation-output.json 2>/tmp/cosign-attestation-error.log
+          then
+            echo "A valid CycloneDX attestation already exists."
+            echo "Skipping SBOM generation and attestation."
 
-          if [[ "${{ inputs.image-with-digest }}" != *@sha256:* ]]; then
-            echo "::error::Image reference must use an immutable sha256 digest."
-            exit 1
+            echo "attestation-exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No valid CycloneDX attestation was found."
+            echo "SBOM generation and attestation are required."
+
+            echo "attestation-exists=false" >> "$GITHUB_OUTPUT"
+
+            if [[ -s /tmp/cosign-attestation-error.log ]]; then
+              echo "Cosign verification output:"
+              cat /tmp/cosign-attestation-error.log
+            fi
           fi
 
-      # ============================================================
-      # 05. Generate CycloneDX SBOM
-      # ============================================================
+      # ------------------------------------------------------------
+      # 8. Generate CycloneDX SBOM only when required
+      # ------------------------------------------------------------
       - name: Generate SBOM - CycloneDX
+        if: steps.verify-attestation.outputs.attestation-exists == 'false'
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           version: v0.72.0
@@ -102,97 +154,58 @@ jobs:
           format: cyclonedx
           output: sbom-image-${{ inputs.service-name }}-cdx.json
 
-      # ============================================================
-      # 06. Verify SBOM file
-      # ============================================================
-      - name: Verify SBOM
+      # ------------------------------------------------------------
+      # 9. Attest CycloneDX SBOM only when required
+      # ------------------------------------------------------------
+      - name: Cosign - Attest CycloneDX SBOM
+        if: steps.verify-attestation.outputs.attestation-exists == 'false'
         shell: bash
         run: |
           set -euo pipefail
 
+          IMAGE="${{ inputs.image-with-digest }}"
           SBOM_FILE="sbom-image-${{ inputs.service-name }}-cdx.json"
 
-          if [[ ! -s "$SBOM_FILE" ]]; then
-            echo "::error::CycloneDX SBOM was not generated."
-            exit 1
-          fi
-
-          echo "CycloneDX SBOM generated successfully:"
-          ls -lh "$SBOM_FILE"
-
-      # ============================================================
-      # 07. Install Cosign
-      # ============================================================
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
-
-      # ============================================================
-      # 08. Verify Cosign installation
-      # ============================================================
-      - name: Verify Cosign
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          cosign version
-
-      # ============================================================
-      # 09. Attest CycloneDX SBOM
-      #
-      # The attestation is attached to the exact immutable image
-      # digest.
-      # ============================================================
-      - name: SBOM Attestation
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          SBOM_FILE="sbom-image-${{ inputs.service-name }}-cdx.json"
-
-          echo "=================================================="
-          echo "Attesting CycloneDX SBOM"
-          echo "=================================================="
-
-          echo "Image:"
-          echo "${{ inputs.image-with-digest }}"
-
-          echo ""
-          echo "SBOM:"
-          echo "$SBOM_FILE"
+          echo "Attesting CycloneDX SBOM:"
+          echo "Image: $IMAGE"
+          echo "SBOM: $SBOM_FILE"
 
           cosign attest \
             --yes \
             --predicate "$SBOM_FILE" \
             --type cyclonedx \
-            "${{ inputs.image-with-digest }}"
+            "$IMAGE"
 
-          echo ""
-          echo "CycloneDX SBOM attestation completed successfully."
+          echo "CycloneDX SBOM attestation completed."
 
-      # ============================================================
-      # 10. Verify attestation exists
-      # ============================================================
-      - name: Verify SBOM attestation
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "=================================================="
-          echo "Verifying SBOM attestation"
-          echo "=================================================="
-
-          cosign verify-attestation \
-            "${{ inputs.image-with-digest }}"
-
-          echo ""
-          echo "SBOM attestation verification completed successfully."
-
-      # ============================================================
-      # 11. Upload SBOM
-      # ============================================================
+      # ------------------------------------------------------------
+      # 10. Upload generated SBOM only when generated
+      # ------------------------------------------------------------
       - name: Upload SBOM
+        if: steps.verify-attestation.outputs.attestation-exists == 'false'
         uses: actions/upload-artifact@v4
         with:
           name: sbom-image-${{ inputs.service-name }}
           path: sbom-image-${{ inputs.service-name }}-cdx.json
           retention-days: 1
+
+      # ------------------------------------------------------------
+      # 11. Verify final attestation state
+      # ------------------------------------------------------------
+      - name: Verify final CycloneDX attestation
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          IMAGE="${{ inputs.image-with-digest }}"
+
+          echo "Verifying final CycloneDX attestation state..."
+
+          cosign verify-attestation \
+            --type cyclonedx \
+            --certificate-identity-regexp="${{ inputs.cosign-certificate-identity-regexp }}" \
+            --certificate-oidc-issuer="${{ inputs.cosign-oidc-issuer }}" \
+            "$IMAGE" >/dev/null
+
+          echo "Valid CycloneDX attestation confirmed for:"
+          echo "$IMAGE"
