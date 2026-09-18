@@ -60,6 +60,11 @@ on:
         required: true
         type: string
 
+      cosign-sbom-attestation-certificate-identity-regexp:
+        description: "Expected Sigstore certificate identity regexp"
+        required: true
+        type: string
+
       cosign-oidc-issuer:
         description: "Expected Cosign OIDC issuer"
         required: false
@@ -854,6 +859,8 @@ jobs:
       aws-ecr-role-arn: ${{ inputs.aws-ecr-prod-promotion-role-arn }}
 
       cosign-certificate-identity-regexp: ${{ inputs.cosign-certificate-identity-regexp }}
+
+      cosign-sbom-attestation-certificate-identity-regexp: ${{ cosign-sbom-attestation-certificate-identity-regexp }}
 
       cosign-oidc-issuer: ${{ inputs.cosign-oidc-issuer }}
 
