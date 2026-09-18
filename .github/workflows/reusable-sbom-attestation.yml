@@ -30,7 +30,7 @@ on:
         required: true
         type: string
 
-      cosign-certificate-identity-regexp:
+      cosign-sbom-attestation-certificate-identity-regexp:
         description: "Expected Sigstore certificate identity regexp"
         required: true
         type: string
@@ -101,7 +101,7 @@ jobs:
           echo "${{ inputs.image-with-digest }}"
 
           echo "Expected certificate identity:"
-          echo "${{ inputs.cosign-certificate-identity-regexp }}"
+          echo "${{ inputs.cosign-sbom-attestation-certificate-identity-regexp }}"
 
           echo "Expected OIDC issuer:"
           echo "${{ inputs.cosign-oidc-issuer }}"
@@ -122,7 +122,7 @@ jobs:
 
           if cosign verify-attestation \
             --type cyclonedx \
-            --certificate-identity-regexp="${{ inputs.cosign-certificate-identity-regexp }}" \
+            --certificate-identity-regexp="${{ inputs.cosign-sbom-attestation-certificate-identity-regexp }}" \
             --certificate-oidc-issuer="${{ inputs.cosign-oidc-issuer }}" \
             "$IMAGE" >/tmp/cosign-attestation-output.json 2>/tmp/cosign-attestation-error.log
           then
@@ -203,7 +203,7 @@ jobs:
 
           cosign verify-attestation \
             --type cyclonedx \
-            --certificate-identity-regexp="${{ inputs.cosign-certificate-identity-regexp }}" \
+            --certificate-identity-regexp="${{ inputs.cosign-sbom-attestation-certificate-identity-regexp }}" \
             --certificate-oidc-issuer="${{ inputs.cosign-oidc-issuer }}" \
             "$IMAGE" >/dev/null
 
