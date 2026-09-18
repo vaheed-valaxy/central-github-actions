@@ -1,0 +1,198 @@
+name: Reusable - SBOM
+
+on:
+  workflow_call:
+    inputs:
+
+      service-name:
+        description: "Service Name"
+        required: true
+        type: string
+
+      runner:
+        description: "Runner label"
+        required: false
+        type: string
+        default: ubuntu-latest
+
+      image-with-digest:
+        description: "Complete image reference with digest"
+        required: true
+        type: string
+
+      aws-region:
+        description: "AWS Region"
+        required: true
+        type: string
+
+      aws-ecr-role-arn:
+        description: "Complete AWS ECR Role ARN"
+        required: true
+        type: string
+
+jobs:
+
+  Generate-Attest-SBOM:
+    name: Generate and Attest SBOM
+    runs-on: ${{ inputs.runner }}
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+
+      # ============================================================
+      # 01. Configure AWS credentials
+      # ============================================================
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ inputs.aws-ecr-role-arn }}
+          aws-region: ${{ inputs.aws-region }}
+
+      # ============================================================
+      # 02. Verify AWS identity
+      # ============================================================
+      - name: Verify AWS identity
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          aws sts get-caller-identity
+
+      # ============================================================
+      # 03. Login to Amazon ECR
+      # ============================================================
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ============================================================
+      # 04. Verify image reference
+      # ============================================================
+      - name: Verify image reference
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=================================================="
+          echo "PROD Image SBOM"
+          echo "=================================================="
+
+          echo "Service:"
+          echo "${{ inputs.service-name }}"
+
+          echo ""
+          echo "Image:"
+          echo "${{ inputs.image-with-digest }}"
+
+          if [[ "${{ inputs.image-with-digest }}" != *@sha256:* ]]; then
+            echo "::error::Image reference must use an immutable sha256 digest."
+            exit 1
+          fi
+
+      # ============================================================
+      # 05. Generate CycloneDX SBOM
+      # ============================================================
+      - name: Generate SBOM - CycloneDX
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: v0.72.0
+          image-ref: ${{ inputs.image-with-digest }}
+          format: cyclonedx
+          output: sbom-image-${{ inputs.service-name }}-cdx.json
+
+      # ============================================================
+      # 06. Verify SBOM file
+      # ============================================================
+      - name: Verify SBOM
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SBOM_FILE="sbom-image-${{ inputs.service-name }}-cdx.json"
+
+          if [[ ! -s "$SBOM_FILE" ]]; then
+            echo "::error::CycloneDX SBOM was not generated."
+            exit 1
+          fi
+
+          echo "CycloneDX SBOM generated successfully:"
+          ls -lh "$SBOM_FILE"
+
+      # ============================================================
+      # 07. Install Cosign
+      # ============================================================
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      # ============================================================
+      # 08. Verify Cosign installation
+      # ============================================================
+      - name: Verify Cosign
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cosign version
+
+      # ============================================================
+      # 09. Attest CycloneDX SBOM
+      #
+      # The attestation is attached to the exact immutable image
+      # digest.
+      # ============================================================
+      - name: SBOM Attestation
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SBOM_FILE="sbom-image-${{ inputs.service-name }}-cdx.json"
+
+          echo "=================================================="
+          echo "Attesting CycloneDX SBOM"
+          echo "=================================================="
+
+          echo "Image:"
+          echo "${{ inputs.image-with-digest }}"
+
+          echo ""
+          echo "SBOM:"
+          echo "$SBOM_FILE"
+
+          cosign attest \
+            --yes \
+            --predicate "$SBOM_FILE" \
+            --type cyclonedx \
+            "${{ inputs.image-with-digest }}"
+
+          echo ""
+          echo "CycloneDX SBOM attestation completed successfully."
+
+      # ============================================================
+      # 10. Verify attestation exists
+      # ============================================================
+      - name: Verify SBOM attestation
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=================================================="
+          echo "Verifying SBOM attestation"
+          echo "=================================================="
+
+          cosign verify-attestation \
+            "${{ inputs.image-with-digest }}"
+
+          echo ""
+          echo "SBOM attestation verification completed successfully."
+
+      # ============================================================
+      # 11. Upload SBOM
+      # ============================================================
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-image-${{ inputs.service-name }}
+          path: sbom-image-${{ inputs.service-name }}-cdx.json
+          retention-days: 1
