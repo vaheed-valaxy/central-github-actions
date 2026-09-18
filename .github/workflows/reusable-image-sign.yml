@@ -1,3 +1,4 @@
+```yaml
 name: Reusable - Cosign Sign Image
 
 on:
@@ -26,9 +27,21 @@ on:
         type: string
 
       aws-ecr-role-arn:
-        description: "Complete AWS ECR Role ARN"
+        description: "AWS IAM role used to access PROD ECR"
         required: true
         type: string
+
+      cosign-certificate-identity-regexp:
+        description: "Expected Sigstore certificate identity regexp"
+        required: true
+        type: string
+
+      cosign-oidc-issuer:
+        description: "Expected OIDC issuer for keyless Cosign signing"
+        required: false
+        type: string
+        default: https://token.actions.githubusercontent.com
+
 
 jobs:
 
@@ -42,133 +55,128 @@ jobs:
 
     steps:
 
-      # ============================================================
-      # 01. Verify AWS CLI
-      # ============================================================
+      # ------------------------------------------------------------
+      # 1. Verify AWS CLI
+      # ------------------------------------------------------------
       - name: Verify AWS CLI
-        shell: bash
         run: |
-          set -euo pipefail
-
           aws --version
 
-      # ============================================================
-      # 02. Configure AWS credentials
-      # ============================================================
+      # ------------------------------------------------------------
+      # 2. Configure AWS credentials
+      # ------------------------------------------------------------
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ inputs.aws-ecr-role-arn }}
           aws-region: ${{ inputs.aws-region }}
 
-      # ============================================================
-      # 03. Verify AWS identity
-      # ============================================================
+      # ------------------------------------------------------------
+      # 3. Verify AWS identity
+      # ------------------------------------------------------------
       - name: Verify AWS identity
-        shell: bash
         run: |
-          set -euo pipefail
-
           aws sts get-caller-identity
 
-      # ============================================================
-      # 04. Login to Amazon ECR
-      # ============================================================
+      # ------------------------------------------------------------
+      # 4. Login to PROD ECR
+      # ------------------------------------------------------------
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # ============================================================
-      # 05. Verify image reference
-      # ============================================================
-      - name: Verify image reference
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "=================================================="
-          echo "Cosign Image Signing"
-          echo "=================================================="
-
-          echo "Service:"
-          echo "${{ inputs.service-name }}"
-
-          echo ""
-          echo "Image:"
-          echo "${{ inputs.image-with-digest }}"
-
-          if [[ "${{ inputs.image-with-digest }}" != *@sha256:* ]]; then
-            echo "::error::Image reference must use an immutable sha256 digest."
-            exit 1
-          fi
-
-      # ============================================================
-      # 06. Install Cosign
-      # ============================================================
+      # ------------------------------------------------------------
+      # 5. Install Cosign
+      # ------------------------------------------------------------
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
 
-      # ============================================================
-      # 07. Verify Cosign installation
-      # ============================================================
-      - name: Verify Cosign
-        shell: bash
+      # ------------------------------------------------------------
+      # 6. Display signing information
+      # ------------------------------------------------------------
+      - name: Display signing information
         run: |
-          set -euo pipefail
-
-          cosign version
-
-      # ============================================================
-      # 08. Cosign keyless sign
-      #
-      # GitHub OIDC
-      #       ↓
-      # Fulcio short-lived certificate
-      #       ↓
-      # Rekor transparency log
-      #       ↓
-      # Signature attached to exact image digest
-      # ============================================================
-      - name: Cosign - Sign image
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "=================================================="
-          echo "Signing exact image digest"
-          echo "=================================================="
+          echo "Service:"
+          echo "${{ inputs.service-name }}"
 
           echo "Image:"
           echo "${{ inputs.image-with-digest }}"
 
-          cosign sign \
-            --yes \
-            "${{ inputs.image-with-digest }}"
+          echo "Expected certificate identity:"
+          echo "${{ inputs.cosign-certificate-identity-regexp }}"
 
-          echo ""
-          echo "Cosign signing completed successfully."
+          echo "Expected OIDC issuer:"
+          echo "${{ inputs.cosign-oidc-issuer }}"
 
-      # ============================================================
-      # 09. Verify signature was created for the exact digest
-      #
-      # This verifies that the signature is attached to the image
-      # reference supplied above.
-      #
-      # Identity restrictions remain enforced by your Kyverno
-      # admission policy in the cluster.
-      # ============================================================
-      - name: Verify Cosign signature
+      # ------------------------------------------------------------
+      # 7. Check whether a valid expected signature already exists
+      # ------------------------------------------------------------
+      - name: Check existing Cosign signature
+        id: verify-signature
         shell: bash
         run: |
           set -euo pipefail
 
-          echo "=================================================="
-          echo "Verifying Cosign signature"
-          echo "=================================================="
+          IMAGE="${{ inputs.image-with-digest }}"
+
+          echo "Checking for an existing valid Cosign signature..."
+          echo "Image: $IMAGE"
+
+          if cosign verify \
+            --certificate-identity-regexp="${{ inputs.cosign-certificate-identity-regexp }}" \
+            --certificate-oidc-issuer="${{ inputs.cosign-oidc-issuer }}" \
+            "$IMAGE" >/tmp/cosign-verify-output.json 2>/tmp/cosign-verify-error.log
+          then
+            echo "A valid expected Cosign signature already exists."
+            echo "Skipping signing."
+
+            echo "signature-exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No valid expected Cosign signature was found."
+            echo "Image requires signing."
+
+            echo "signature-exists=false" >> "$GITHUB_OUTPUT"
+
+            if [[ -s /tmp/cosign-verify-error.log ]]; then
+              echo "Cosign verification output:"
+              cat /tmp/cosign-verify-error.log
+            fi
+          fi
+
+      # ------------------------------------------------------------
+      # 8. Sign only when the required signature does not exist
+      # ------------------------------------------------------------
+      - name: Cosign - Sign image
+        if: steps.verify-signature.outputs.signature-exists == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          IMAGE="${{ inputs.image-with-digest }}"
+
+          echo "Signing image:"
+          echo "$IMAGE"
+
+          cosign sign --yes "$IMAGE"
+
+          echo "Image signing completed."
+
+      # ------------------------------------------------------------
+      # 9. Verify final state
+      # ------------------------------------------------------------
+      - name: Verify final Cosign signature
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          IMAGE="${{ inputs.image-with-digest }}"
+
+          echo "Verifying final signature state..."
 
           cosign verify \
-            --certificate-oidc-issuer-regexp '^https://token.actions.githubusercontent.com$' \
-            --certificate-identity-regexp '.*' \
-            "${{ inputs.image-with-digest }}"
+            --certificate-identity-regexp="${{ inputs.cosign-certificate-identity-regexp }}" \
+            --certificate-oidc-issuer="${{ inputs.cosign-oidc-issuer }}" \
+            "$IMAGE" >/dev/null
 
-          echo ""
-          echo "Cosign signature verification completed successfully."
+          echo "Valid Cosign signature confirmed for:"
+          echo "$IMAGE"
+```
