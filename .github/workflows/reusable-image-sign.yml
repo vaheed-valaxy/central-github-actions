@@ -143,7 +143,7 @@ jobs:
       # ------------------------------------
       # This should be deleted later
       # ------------------------------------
-            - name: Debug signing OIDC claims
+      - name: Debug signing OIDC claims
         shell: bash
         run: |
           set -euo pipefail
@@ -244,5 +244,5 @@ jobs:
       #       --certificate-oidc-issuer="${{ inputs.cosign-oidc-issuer }}" \
       #       "$IMAGE" >/dev/null
 
-          echo "Valid Cosign signature confirmed for:"
-          echo "$IMAGE"
+      #     echo "Valid Cosign signature confirmed for:"
+      #     echo "$IMAGE"
