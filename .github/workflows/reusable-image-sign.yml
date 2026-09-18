@@ -141,9 +141,13 @@ jobs:
             fi
           fi
          
-         
+
+
+
+
+
       # ------------------------------------------------------------
-      # TEMPORARY - DELETE AFTER OIDC DEBUGGING
+      # TEMPORARY OIDC DEBUG - DELETE AFTER DEBUGGING
       # ------------------------------------------------------------
       - name: Debug signing OIDC claims
         shell: bash
@@ -154,47 +158,38 @@ jobs:
           echo "OIDC claims used by Cosign signing workflow"
           echo "=================================================="
 
-          OIDC_TOKEN="$(
-            curl \
-              --fail \
-              --silent \
-              --show-error \
-              -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-              "$ACTIONS_ID_TOKEN_REQUEST_URL" \
-            | jq -r '.value'
-          )
+          echo "OIDC issuer:"
+          echo "$ACTIONS_ID_TOKEN_REQUEST_URL"
+
+          echo
+          echo "Requesting OIDC token..."
+
+          OIDC_TOKEN=$(curl \
+            --fail \
+            --silent \
+            --show-error \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL" \
+            | jq -r '.value')
 
           if [[ -z "$OIDC_TOKEN" || "$OIDC_TOKEN" == "null" ]]; then
             echo "::error::Failed to obtain GitHub OIDC token."
             exit 1
           fi
 
-          PAYLOAD="$(
-            echo "$OIDC_TOKEN" |
-            cut -d '.' -f 2 |
-            tr '_-' '/+' |
-            awk '{
-              printf "%s", $0
-              n=length($0)%4
-              if (n==2) printf "=="
-              else if (n==3) printf "="
-            }' |
-            base64 --decode
-          )"
+          echo "OIDC token obtained successfully."
+          echo
 
-          echo "$PAYLOAD" | jq -r '
-            "iss: \(.iss)",
-            "sub: \(.sub)",
-            "aud: \(.aud)",
-            "repository: \(.repository)",
-            "repository_owner: \(.repository_owner)",
-            "workflow: \(.workflow)",
-            "workflow_ref: \(.workflow_ref)",
-            "job_workflow_ref: \(.job_workflow_ref)",
-            "ref: \(.ref)",
-            "ref_type: \(.ref_type)",
-            "actor: \(.actor)"
-          '
+          echo "JWT header:"
+          echo "$OIDC_TOKEN" | cut -d '.' -f 1 | base64 -d 2>/dev/null | jq .
+
+          echo
+          echo "JWT payload:"
+          echo "$OIDC_TOKEN" | cut -d '.' -f 2 | base64 -d 2>/dev/null | jq .
+
+
+
+
           
       # ------------------------------------------------------------
       # 8. Sign only when the required signature does not exist
