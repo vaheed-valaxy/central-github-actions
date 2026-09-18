@@ -51,9 +51,20 @@ on:
         type: string
 
       aws-ecr-prod-promotion-role-arn:
-        description: "AWS IAM role ARN used for QA to PROD ECR promotion"
+        description: "AWS IAM role ARN used for QA to PROD ECR promotion and PROD security metadata"
         required: true
         type: string
+
+      cosign-certificate-identity-regexp:
+        description: "Expected Cosign certificate identity regexp"
+        required: true
+        type: string
+
+      cosign-oidc-issuer:
+        description: "Expected Cosign OIDC issuer"
+        required: false
+        type: string
+        default: https://token.actions.githubusercontent.com
 
     secrets:
       GITOPS_TOKEN:
@@ -66,6 +77,7 @@ permissions:
   pull-requests: write
 
 env:
+
   SERVICE: ${{ inputs.service-name }}
 
   GITOPS_OWNER: ${{ inputs.gitops-owner }}
@@ -77,6 +89,9 @@ env:
 
   AWS_REGION: ${{ inputs.aws-region }}
   AWS_ECR_PROD_PROMOTION_ROLE_ARN: ${{ inputs.aws-ecr-prod-promotion-role-arn }}
+
+  COSIGN_CERTIFICATE_IDENTITY_REGEXP: ${{ inputs.cosign-certificate-identity-regexp }}
+  COSIGN_OIDC_ISSUER: ${{ inputs.cosign-oidc-issuer }}
 
   CRANE_VERSION: v0.21.7
   YQ_VERSION: "v4.47.1"
@@ -92,7 +107,18 @@ jobs:
 
   # ================================================================
   # JOB 1
-  # Check everything required before image promotion
+  #
+  # Check everything required before image promotion/security steps.
+  #
+  # IMPORTANT:
+  # prod-already-current means ONLY:
+  #
+  #   QA GitOps digest == PROD GitOps digest
+  #
+  # It does NOT mean that PROD signing/SBOM security metadata exists.
+  #
+  # Therefore ECR/security checks still run when the GitOps digest
+  # is already current.
   # ================================================================
   Promote-Check-Job:
     name: Promotion Prerequisites Check
@@ -104,6 +130,7 @@ jobs:
       matched-file-digest-with-qa-ecr: ${{ steps.check-file-digest-with-qa-ecr.outputs.matched-file-digest-with-qa-ecr }}
       prod-image-already-exists: ${{ steps.prod-ecr-check.outputs.prod-image-already-exists }}
       prod-already-current: ${{ steps.compare-digests.outputs.prod-already-current }}
+      prod-image-with-digest: ${{ steps.prod-image-reference.outputs.prod-image-with-digest }}
 
     steps:
 
@@ -246,6 +273,11 @@ jobs:
 
       # ============================================================
       # 07. Compare QA and PROD Image DIGEST
+      #
+      # IMPORTANT:
+      # This only determines whether GitOps needs a digest update.
+      #
+      # It does NOT skip ECR/signature/SBOM checks.
       # ============================================================
       - name: Compare QA and PROD image DIGEST
         id: compare-digests
@@ -289,8 +321,10 @@ jobs:
 
             echo ""
             echo "QA and PROD GitOps already contain the exact same digest."
-            echo "No PROD promotion is required."
-            echo "No GitOps PR update is required."
+            echo "No GitOps digest update is required."
+            echo ""
+            echo "IMPORTANT:"
+            echo "PROD ECR/signature/SBOM checks will still run."
 
             echo "prod-already-current=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -308,9 +342,13 @@ jobs:
 
       # ============================================================
       # 08. Configure AWS using GitHub OIDC
+      #
+      # ALWAYS RUN.
+      #
+      # We must be able to check PROD ECR even if GitOps already
+      # contains the same digest.
       # ============================================================
       - name: Configure AWS credentials
-        if: steps.compare-digests.outputs.prod-already-current != 'true'
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ env.AWS_ECR_PROD_PROMOTION_ROLE_ARN }}
@@ -320,7 +358,6 @@ jobs:
       # 09. Get AWS Account ID
       # ============================================================
       - name: Get AWS account ID
-        if: steps.compare-digests.outputs.prod-already-current != 'true'
         id: aws-account
         shell: bash
         run: |
@@ -341,9 +378,10 @@ jobs:
 
       # ============================================================
       # 10. Verify QA GitOps digest exists in QA ECR
+      #
+      # ALWAYS RUN.
       # ============================================================
       - name: Verify QA GitOps digest exists in QA ECR
-        if: steps.compare-digests.outputs.prod-already-current != 'true'
         id: check-file-digest-with-qa-ecr
         shell: bash
         run: |
@@ -378,9 +416,10 @@ jobs:
 
       # ============================================================
       # 11. Find original SHA tag from QA
+      #
+      # ALWAYS RUN.
       # ============================================================
       - name: Find QA image tag
-        if: steps.compare-digests.outputs.prod-already-current != 'true'
         id: image-info
         shell: bash
         run: |
@@ -428,9 +467,12 @@ jobs:
 
       # ============================================================
       # 12. Check whether exact image already exists in PROD ECR
+      #
+      # ALWAYS RUN.
+      #
+      # This is critical for retry/idempotency.
       # ============================================================
       - name: Check PROD image
-        if: steps.compare-digests.outputs.prod-already-current != 'true'
         id: prod-ecr-check
         shell: bash
         env:
@@ -483,7 +525,7 @@ jobs:
             echo ""
             echo "Exact image already exists in PROD ECR."
             echo "Image copy can be skipped."
-            echo "Security metadata jobs will still run."
+            echo "Security metadata verification will still run."
 
             echo "prod-image-already-exists=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -511,10 +553,45 @@ jobs:
 
           exit 1
 
+      # ============================================================
+      # 13. Build exact immutable PROD image reference
+      #
+      # This reference is used by both Cosign and SBOM workflows.
+      # ============================================================
+      - name: Build exact PROD image reference
+        id: prod-image-reference
+        shell: bash
+        env:
+          ACCOUNT_ID: ${{ steps.aws-account.outputs.account-id }}
+          MATCHED_FILE_DIGEST_WITH_QA_ECR: ${{ steps.check-file-digest-with-qa-ecr.outputs.matched-file-digest-with-qa-ecr }}
+        run: |
+          set -euo pipefail
+
+          REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+          PROD_IMAGE_WITH_DIGEST="${REGISTRY}/${PROD_ECR_REPO}@${MATCHED_FILE_DIGEST_WITH_QA_ECR}"
+
+          echo "=================================================="
+          echo "Exact PROD image reference"
+          echo "=================================================="
+
+          echo "$PROD_IMAGE_WITH_DIGEST"
+
+          echo "prod-image-with-digest=$PROD_IMAGE_WITH_DIGEST" >> "$GITHUB_OUTPUT"
+
 
   # ================================================================
   # JOB 2
-  # Copy exact QA image digest to PROD
+  #
+  # Copy exact QA image digest to PROD.
+  #
+  # This job is skipped when the exact PROD image already exists.
+  #
+  # IMPORTANT:
+  # It does NOT depend on prod-already-current.
+  #
+  # Even if GitOps already has the digest, we repair PROD ECR if
+  # the exact image is missing.
   # ================================================================
   Promote-Qa-Image-Prod-Job:
     name: Promote QA Image to PROD
@@ -523,9 +600,8 @@ jobs:
     needs:
       - Promote-Check-Job
 
-    if: |
+    if: >-
       needs.Promote-Check-Job.result == 'success' &&
-      needs.Promote-Check-Job.outputs.prod-already-current != 'true' &&
       needs.Promote-Check-Job.outputs.prod-image-already-exists != 'true'
 
     outputs:
@@ -675,19 +751,27 @@ jobs:
 
   # ================================================================
   # JOB 3
-  # Sign exact PROD image digest
+  #
+  # Sign exact PROD image digest.
   #
   # IMPORTANT:
-  # This job runs even when Job 2 is SKIPPED because the exact image
-  # already exists in PROD ECR.
+  # This runs whether:
   #
-  # This is what handles:
+  #   Job 2 copied the image
   #
-  #   copy succeeded
-  #   signing failed
-  #   workflow rerun
+  # OR
   #
-  # On rerun, Job 2 is skipped and this job still runs.
+  #   Job 2 was skipped because the exact image already exists.
+  #
+  # The reusable signing workflow performs:
+  #
+  #   verify existing signature
+  #          ↓
+  #   exists → SKIP
+  #          ↓
+  #   missing → SIGN
+  #
+  # This makes the operation retry-safe.
   # ================================================================
   Sign-Prod-Image-Job:
     name: Sign PROD Image
@@ -695,10 +779,9 @@ jobs:
       - Promote-Check-Job
       - Promote-Qa-Image-Prod-Job
 
-    if: |
+    if: >-
       always() &&
       needs.Promote-Check-Job.result == 'success' &&
-      needs.Promote-Check-Job.outputs.prod-already-current != 'true' &&
       (
         needs.Promote-Qa-Image-Prod-Job.result == 'success' ||
         needs.Promote-Qa-Image-Prod-Job.result == 'skipped'
@@ -712,34 +795,45 @@ jobs:
 
     with:
       service-name: ${{ inputs.service-name }}
+
       runner: ${{ inputs.runner }}
 
-      image-with-digest: >-
-        ${{ needs.Promote-Check-Job.outputs.account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com/${{ inputs.prod-ecr-repo }}@${{ needs.Promote-Check-Job.outputs.matched-file-digest-with-qa-ecr }}
+      image-with-digest: ${{ needs.Promote-Check-Job.outputs.prod-image-with-digest }}
 
       aws-region: ${{ inputs.aws-region }}
+
       aws-ecr-role-arn: ${{ inputs.aws-ecr-prod-promotion-role-arn }}
+
+      cosign-certificate-identity-regexp: ${{ inputs.cosign-certificate-identity-regexp }}
+
+      cosign-oidc-issuer: ${{ inputs.cosign-oidc-issuer }}
 
 
   # ================================================================
   # JOB 4
-  # Generate CycloneDX SBOM and attest exact PROD image digest
+  #
+  # Generate CycloneDX SBOM and attest exact PROD image digest.
+  #
+  # This runs only after signing succeeds.
+  #
+  # The reusable SBOM workflow performs:
+  #
+  #   verify existing CycloneDX attestation
+  #              ↓
+  #       exists → SKIP
+  #              ↓
+  #       missing → generate SBOM → attest
+  #
+  # This makes the operation retry-safe.
   # ================================================================
   SBOM-Prod-Image-Job:
     name: Generate and Attest PROD SBOM
+
     needs:
       - Promote-Check-Job
-      - Promote-Qa-Image-Prod-Job
       - Sign-Prod-Image-Job
 
-    if: |
-      always() &&
-      needs.Promote-Check-Job.result == 'success' &&
-      needs.Promote-Check-Job.outputs.prod-already-current != 'true' &&
-      (
-        needs.Promote-Qa-Image-Prod-Job.result == 'success' ||
-        needs.Promote-Qa-Image-Prod-Job.result == 'skipped'
-      ) &&
+    if: >-
       needs.Sign-Prod-Image-Job.result == 'success'
 
     permissions:
@@ -750,23 +844,35 @@ jobs:
 
     with:
       service-name: ${{ inputs.service-name }}
+
       runner: ${{ inputs.runner }}
 
-      image-with-digest: >-
-        ${{ needs.Promote-Check-Job.outputs.account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com/${{ inputs.prod-ecr-repo }}@${{ needs.Promote-Check-Job.outputs.matched-file-digest-with-qa-ecr }}
+      image-with-digest: ${{ needs.Promote-Check-Job.outputs.prod-image-with-digest }}
 
       aws-region: ${{ inputs.aws-region }}
+
       aws-ecr-role-arn: ${{ inputs.aws-ecr-prod-promotion-role-arn }}
+
+      cosign-certificate-identity-regexp: ${{ inputs.cosign-certificate-identity-regexp }}
+
+      cosign-oidc-issuer: ${{ inputs.cosign-oidc-issuer }}
 
 
   # ================================================================
   # JOB 5
-  # Update stable GitOps branch and create/reuse promotion PR
   #
-  # This job is allowed to run when the image copy was skipped,
-  # because the image may already exist in PROD ECR.
+  # Update stable GitOps branch and create/reuse promotion PR.
   #
-  # But signing + SBOM MUST succeed first.
+  # IMPORTANT:
+  # This job ONLY runs when:
+  #
+  #   1. Image is available in PROD.
+  #   2. Signature verification/signing succeeded.
+  #   3. SBOM verification/attestation succeeded.
+  #   4. PROD GitOps digest is different from QA digest.
+  #
+  # If PROD GitOps already contains the same digest, there is no
+  # GitOps change/PR required.
   # ================================================================
   Create-Pull-Request-Job:
     name: Create or Update PROD Promotion PR
@@ -778,16 +884,16 @@ jobs:
       - Sign-Prod-Image-Job
       - SBOM-Prod-Image-Job
 
-    if: |
+    if: >-
       always() &&
       needs.Promote-Check-Job.result == 'success' &&
-      needs.Promote-Check-Job.outputs.prod-already-current != 'true' &&
       (
         needs.Promote-Qa-Image-Prod-Job.result == 'success' ||
         needs.Promote-Qa-Image-Prod-Job.result == 'skipped'
       ) &&
       needs.Sign-Prod-Image-Job.result == 'success' &&
-      needs.SBOM-Prod-Image-Job.result == 'success'
+      needs.SBOM-Prod-Image-Job.result == 'success' &&
+      needs.Promote-Check-Job.outputs.prod-already-current != 'true'
 
     steps:
 
@@ -1175,9 +1281,11 @@ jobs:
 
           Before this PR is created or updated:
 
-          - Exact PROD image digest was signed with Cosign keyless signing.
-          - CycloneDX SBOM was generated for the exact PROD image digest.
-          - CycloneDX SBOM was attested to the exact PROD image digest.
+          - Exact PROD image digest was verified/signed with Cosign keyless signing.
+          - CycloneDX SBOM attestation was verified/generated for the exact PROD image digest.
+          - Existing valid security metadata is reused on workflow retries.
+
+          ## GitOps Validation
 
           After this PR is opened or updated, required GitOps CI checks must pass:
 
@@ -1301,9 +1409,11 @@ jobs:
 
           Before this PR was created or updated:
 
-          - Exact PROD image digest was signed with Cosign keyless signing.
-          - CycloneDX SBOM was generated for the exact PROD image digest.
-          - CycloneDX SBOM was attested to the exact PROD image digest.
+          - Exact PROD image digest was verified/signed with Cosign keyless signing.
+          - CycloneDX SBOM attestation was verified/generated for the exact PROD image digest.
+          - Existing valid security metadata is reused on workflow retries.
+
+          ## GitOps Validation
 
           After this PR is opened or updated, required GitOps CI checks must pass:
 
@@ -1325,7 +1435,7 @@ jobs:
 
           echo ""
           echo "=================================================="
-          echo "Existing QA promotion PR updated successfully"
+          echo "Existing PROD promotion PR updated successfully"
           echo "=================================================="
 
           echo "PR:"
