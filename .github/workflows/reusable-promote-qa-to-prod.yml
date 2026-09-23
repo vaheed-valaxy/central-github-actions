@@ -1250,9 +1250,9 @@ jobs:
 
           Promotion branch: \`${BRANCH}\`
 
-          QA repository: \`${QA_ECR_REPO}\`
+          QA ECR repository: \`${QA_ECR_REPO}\`
 
-          PROD repository: \`${PROD_ECR_REPO}\`
+          PROD ECR repository: \`${PROD_ECR_REPO}\`
 
           Image tag: \`${QA_IMAGE_TAG}\`
 
