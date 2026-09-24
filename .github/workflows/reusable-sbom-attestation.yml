@@ -209,3 +209,40 @@ jobs:
 
           echo "Valid CycloneDX attestation confirmed for:"
           echo "$IMAGE"
+
+
+      ##################################################################################################
+      - name: Inspect final CycloneDX attestation
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          IMAGE="${{ inputs.image-with-digest }}"
+
+          echo "=============================================="
+          echo "CycloneDX attestation"
+          echo "=============================================="
+
+          cosign verify-attestation \
+            --type cyclonedx \
+            --certificate-identity-regexp="${{ inputs.cosign-sbom-attestation-certificate-identity-regexp }}" \
+            --certificate-oidc-issuer="${{ inputs.cosign-oidc-issuer }}" \
+            "$IMAGE" \
+            > /tmp/sbom-attestation.json
+
+          echo
+          echo "=============================================="
+          echo "Attestation payload"
+          echo "=============================================="
+
+          jq -r '.payload' /tmp/sbom-attestation.json \
+            | base64 -d \
+            | jq .
+
+          echo
+          echo "=============================================="
+          echo "Certificate information"
+          echo "=============================================="
+
+          jq '.signatures' /tmp/sbom-attestation.json
+          ##########################################################################################################################
