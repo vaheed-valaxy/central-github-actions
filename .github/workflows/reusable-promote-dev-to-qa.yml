@@ -1095,9 +1095,9 @@ jobs:
 
           Promotion branch: \`${BRANCH}\`
 
-          DEV repository: \`${DEV_ECR_REPO}\`
+          DEV ECR repository: \`${DEV_ECR_REPO}\`
 
-          QA repository: \`${QA_ECR_REPO}\`
+          QA ECR repository: \`${QA_ECR_REPO}\`
 
           Image tag: \`${DEV_IMAGE_TAG}\`
 
