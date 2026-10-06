@@ -94,8 +94,7 @@ jobs:
       # ------------------------------------------------------------
       - name: Display signing information
         run: |
-          echo "Service:"
-          echo "${{ inputs.service-name }}"
+          echo "Service: ${{ inputs.service-name }}"
 
           echo "Image:"
           echo "${{ inputs.image-with-digest }}"
