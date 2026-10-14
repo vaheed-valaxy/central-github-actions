@@ -56,8 +56,9 @@ on:
         
       aws-ecr-role-arn:
         description: "Complete AWS ECR Role arn"
-        required: true
+        required: false
         type: string
+        default: ''
 
     outputs:
       image:
@@ -193,7 +194,7 @@ jobs:
       # Configure AWS Credentials
       # -------------------------------------------------------------------
       - name: Configure AWS credentials (OIDC)
-        if: ${{ inputs.image-push-ecr }}
+        if: ${{ inputs.image-push-ecr && inputs.aws-ecr-role-arn != '' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ inputs.aws-ecr-role-arn }}
