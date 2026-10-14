@@ -155,41 +155,19 @@ jobs:
           category: trivy-image-${{ inputs.service-name }} 
 
       # -------------------------------------------------------------------
+      # Setup AWS CLI v2
+      # -------------------------------------------------------------------
+      - name: Setup AWS CLI v2
+        if: ${{ inputs.image-push-ecr }}
+        uses: vaheed-valaxy/central-github-actions/.github/actions/setup-aws-cli@main
+        
+      # -------------------------------------------------------------------
       # Verify AWS CLI version
       # -------------------------------------------------------------------
       - name: Verify AWS CLI
         if: ${{ inputs.image-push-ecr }}
         run: aws --version
 
-      #####################      Some Debug      ################################
-      
-      - name: Debug GitHub OIDC Claims
-        run: |
-          echo "Repository : $GITHUB_REPOSITORY"
-          echo "Ref        : $GITHUB_REF"
-          echo "Ref name   : $GITHUB_REF_NAME"
-          echo "Event      : $GITHUB_EVENT_NAME"
-      
-          echo "Requesting OIDC token..."
-      
-          RESPONSE=$(curl -sS \
-            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com")
-      
-          TOKEN=$(echo "$RESPONSE" | jq -r '.value')
-      
-          echo "$TOKEN" | cut -d '.' -f2 | base64 -d 2>/dev/null | jq '{
-            iss,
-            aud,
-            sub,
-            repository,
-            repository_owner,
-            ref,
-            event_name
-          }'
-          
-      #####################################################################
-      
       # -------------------------------------------------------------------
       # Configure AWS Credentials
       # -------------------------------------------------------------------
