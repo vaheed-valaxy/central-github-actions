@@ -1,0 +1,102 @@
+name: Setup AWS CLI v2
+description: Check and install AWS CLI v2 on Linux runners
+
+runs:
+  using: composite
+  steps:
+    - name: Check and install AWS CLI v2
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        echo "Checking AWS CLI v2..."
+
+        # Skip installation if AWS CLI v2 is already available.
+        if command -v aws >/dev/null 2>&1 &&
+           aws --version 2>&1 | grep -q 'aws-cli/2\.'; then
+          aws --version
+          echo "AWS CLI v2 is already installed."
+          exit 0
+        fi
+
+        echo "AWS CLI v2 is missing. Preparing installation..."
+
+        # Detect CPU architecture.
+        case "$(uname -m)" in
+          x86_64)
+            AWS_ARCH="x86_64"
+            ;;
+          aarch64|arm64)
+            AWS_ARCH="aarch64"
+            ;;
+          *)
+            echo "ERROR: Unsupported architecture: $(uname -m)"
+            exit 1
+            ;;
+        esac
+
+        # Install prerequisites if missing.
+        if ! command -v curl >/dev/null 2>&1 ||
+           ! command -v unzip >/dev/null 2>&1; then
+
+          if [[ "$(id -u)" -ne 0 ]] &&
+             ! command -v sudo >/dev/null 2>&1; then
+            echo "ERROR: Installing prerequisites requires root or sudo."
+            exit 1
+          fi
+
+          if command -v apt-get >/dev/null 2>&1; then
+            if [[ "$(id -u)" -eq 0 ]]; then
+              apt-get update
+              apt-get install -y curl unzip
+            else
+              sudo apt-get update
+              sudo apt-get install -y curl unzip
+            fi
+          elif command -v dnf >/dev/null 2>&1; then
+            if [[ "$(id -u)" -eq 0 ]]; then
+              dnf install -y curl unzip
+            else
+              sudo dnf install -y curl unzip
+            fi
+          elif command -v yum >/dev/null 2>&1; then
+            if [[ "$(id -u)" -eq 0 ]]; then
+              yum install -y curl unzip
+            else
+              sudo yum install -y curl unzip
+            fi
+          else
+            echo "ERROR: No supported package manager found."
+            exit 1
+          fi
+        fi
+
+        # Download the official AWS CLI v2 installer.
+        curl -fsSL \
+          "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_ARCH}.zip" \
+          -o /tmp/awscliv2.zip
+
+        unzip -q -o /tmp/awscliv2.zip -d /tmp
+
+        # Install or update AWS CLI v2.
+        if [[ "$(id -u)" -eq 0 ]]; then
+          /tmp/aws/install --update
+        elif command -v sudo >/dev/null 2>&1; then
+          sudo /tmp/aws/install --update
+        else
+          echo "ERROR: Installing AWS CLI requires root or sudo."
+          exit 1
+        fi
+
+        # Clean up installer files.
+        rm -rf /tmp/aws /tmp/awscliv2.zip
+
+        # Verify the installed version.
+        aws --version
+
+        if ! aws --version 2>&1 | grep -q 'aws-cli/2\.'; then
+          echo "ERROR: AWS CLI v2 installation verification failed."
+          exit 1
+        fi
+
+        echo "AWS CLI v2 is ready."
