@@ -354,6 +354,7 @@ jobs:
       # contains the same digest.
       # ============================================================
       - name: Configure AWS credentials
+        if: env.AWS_ECR_PROD_PROMOTION_ROLE_ARN != '' && inputs.runner != 'ubuntu-latest'
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ env.AWS_ECR_PROD_PROMOTION_ROLE_ARN }}
@@ -619,6 +620,7 @@ jobs:
       # 01. Configure AWS using GitHub OIDC
       # ============================================================
       - name: Configure AWS credentials
+        if: env.AWS_ECR_PROD_PROMOTION_ROLE_ARN != '' && inputs.runner != 'ubuntu-latest'
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ env.AWS_ECR_PROD_PROMOTION_ROLE_ARN }}
@@ -800,17 +802,11 @@ jobs:
 
     with:
       service-name: ${{ inputs.service-name }}
-
       runner: ${{ inputs.runner }}
-
       image-with-digest: ${{ needs.Promote-Check-Job.outputs.prod-image-with-digest }}
-
       aws-region: ${{ inputs.aws-region }}
-
       aws-ecr-role-arn: ${{ inputs.aws-ecr-prod-promotion-role-arn }}
-
       cosign-certificate-identity-regexp: ${{ inputs.cosign-certificate-identity-regexp }}
-
       cosign-oidc-issuer: ${{ inputs.cosign-oidc-issuer }}
 
 
@@ -838,9 +834,8 @@ jobs:
       - Promote-Check-Job
       - Sign-Prod-Image-Job
 
-    if: >-
-      needs.Sign-Prod-Image-Job.result == 'success'
-
+    if: needs.Sign-Prod-Image-Job.result == 'success'
+      
     permissions:
       contents: read
       id-token: write
@@ -849,17 +844,11 @@ jobs:
 
     with:
       service-name: ${{ inputs.service-name }}
-
       runner: ${{ inputs.runner }}
-
       image-with-digest: ${{ needs.Promote-Check-Job.outputs.prod-image-with-digest }}
-
       aws-region: ${{ inputs.aws-region }}
-
       aws-ecr-role-arn: ${{ inputs.aws-ecr-prod-promotion-role-arn }}
-
       cosign-sbom-attestation-certificate-identity-regexp: ${{ inputs.cosign-sbom-attestation-certificate-identity-regexp }}
-
       cosign-oidc-issuer: ${{ inputs.cosign-oidc-issuer }}
 
 
