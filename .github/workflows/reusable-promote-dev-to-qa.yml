@@ -318,9 +318,10 @@ jobs:
       # ============================================================
       - name: Configure AWS credentials
       
-        if: steps.compare-digests.outputs.qa-already-current != 'true' &&
-            env.AWS_ECR_QA_PROMOTION_ROLE_ARN != '' &&
-            inputs.runner != 'ubuntu-latest'
+        if: >-
+          steps.compare-digests.outputs.qa-already-current != 'true' &&
+          env.AWS_ECR_QA_PROMOTION_ROLE_ARN != '' &&
+          inputs.runner != 'ubuntu-latest'
             
         uses: aws-actions/configure-aws-credentials@v6
         with:
