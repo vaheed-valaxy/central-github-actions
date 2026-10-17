@@ -317,7 +317,11 @@ jobs:
       # 08. Configure AWS using GitHub OIDC
       # ============================================================
       - name: Configure AWS credentials
-        if: steps.compare-digests.outputs.qa-already-current != 'true'
+      
+        if: steps.compare-digests.outputs.qa-already-current != 'true' &&
+            env.AWS_ECR_QA_PROMOTION_ROLE_ARN != '' &&
+            inputs.runner != 'ubuntu-latest'
+            
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ env.AWS_ECR_QA_PROMOTION_ROLE_ARN }}
@@ -550,6 +554,7 @@ jobs:
       # 01. Configure AWS using GitHub OIDC
       # ============================================================
       - name: Configure AWS credentials
+        if: env.AWS_ECR_QA_PROMOTION_ROLE_ARN != '' && inputs.runner != 'ubuntu-latest'
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ env.AWS_ECR_QA_PROMOTION_ROLE_ARN }}
