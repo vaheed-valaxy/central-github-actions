@@ -111,6 +111,25 @@ concurrency:
 jobs:
 
   # ================================================================
+  # JOB 0: Set Variables
+  # ================================================================
+  Set-Variables-Job:
+    runs-on: ubuntu-latest
+    outputs:
+      aws-ecr-prod-promotion-role-arn: ${{ steps.set-variables.outputs.aws-ecr-prod-promotion-role-arn }}
+      runner: ${{ steps.set-variables.outputs.runs-on }}
+    steps:
+      - name: Set Variables
+        id: set-variables
+        env: 
+          AWS_ECR_PROD_PROMOTION_ROLE_ARN: ${{ inputs.runner == 'ubuntu-latest' && inputs.aws-ecr-prod-promotion-role-arn || '' }}
+          RUNNER: ${{ inputs.runner }}
+        run: |
+          echo "aws-ecr-prod-promotion-role-arn=$AWS_ECR_PROD_PROMOTION_ROLE_ARN" >> "$GITHUB_OUTPUT"
+          echo "runner=$RUNNER" >> "$GITHUB_OUTPUT"
+          
+
+  # ================================================================
   # JOB 1
   #
   # Check everything required before image promotion/security steps.
