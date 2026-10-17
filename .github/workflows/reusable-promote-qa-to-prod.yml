@@ -802,6 +802,7 @@ jobs:
   Sign-Prod-Image-Job:
     name: Sign PROD Image
     needs:
+      - Set-Variables-Job
       - Promote-Check-Job
       - Promote-Qa-Image-Prod-Job
 
@@ -818,13 +819,12 @@ jobs:
       id-token: write
 
     uses: vaheed-valaxy/central-github-actions/.github/workflows/reusable-image-sign.yml@main
-
     with:
       service-name: ${{ inputs.service-name }}
-      runner: ${{ inputs.runner }}
+      runner: ${{ needs.Set-Variables-Job.outputs.runner }}
       image-with-digest: ${{ needs.Promote-Check-Job.outputs.prod-image-with-digest }}
       aws-region: ${{ inputs.aws-region }}
-      aws-ecr-role-arn: ${{ inputs.aws-ecr-prod-promotion-role-arn }}
+      aws-ecr-role-arn: ${{ needs.Set-Variables-Job.outputs.aws-ecr-prod-promotion-role-arn }}
       cosign-certificate-identity-regexp: ${{ inputs.cosign-certificate-identity-regexp }}
       cosign-oidc-issuer: ${{ inputs.cosign-oidc-issuer }}
 
@@ -850,6 +850,7 @@ jobs:
     name: Generate and Attest PROD SBOM
 
     needs:
+      - Set-Variables-Job
       - Promote-Check-Job
       - Sign-Prod-Image-Job
 
@@ -860,13 +861,12 @@ jobs:
       id-token: write
 
     uses: vaheed-valaxy/central-github-actions/.github/workflows/reusable-sbom-attestation.yml@main
-
     with:
       service-name: ${{ inputs.service-name }}
-      runner: ${{ inputs.runner }}
+      runner: ${{ needs.Set-Variables-Job.outputs.runner }}
       image-with-digest: ${{ needs.Promote-Check-Job.outputs.prod-image-with-digest }}
       aws-region: ${{ inputs.aws-region }}
-      aws-ecr-role-arn: ${{ inputs.aws-ecr-prod-promotion-role-arn }}
+      aws-ecr-role-arn: ${{ needs.Set-Variables-Job.outputs.aws-ecr-prod-promotion-role-arn }}
       cosign-sbom-attestation-certificate-identity-regexp: ${{ inputs.cosign-sbom-attestation-certificate-identity-regexp }}
       cosign-oidc-issuer: ${{ inputs.cosign-oidc-issuer }}
 
