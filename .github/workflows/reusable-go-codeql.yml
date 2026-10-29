@@ -36,14 +36,6 @@ jobs:
         with:
           go-version: "1.24"
 
-      # - name: Create CodeQL configuration
-      #   run: |
-      #     cat > codeql-config.yml <<EOF
-      #     name: Go CodeQL
-      #     paths:
-      #       - ${{ inputs.service-name }}
-      #     EOF
-
       - name: Install file utility
         shell: bash
         run: |
@@ -86,6 +78,15 @@ jobs:
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:go"
+          
+
+      # - name: Create CodeQL configuration
+      #   run: |
+      #     cat > codeql-config.yml <<EOF
+      #     name: Go CodeQL
+      #     paths:
+      #       - ${{ inputs.service-name }}
+      #     EOF
 
       # # Initialize CodeQL
       # - name: Initialize CodeQL
