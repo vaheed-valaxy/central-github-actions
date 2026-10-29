@@ -43,6 +43,35 @@ jobs:
       #     paths:
       #       - ${{ inputs.service-name }}
       #     EOF
+
+      - name: Install file utility
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if command -v file >/dev/null 2>&1; then
+            echo "file utility is already installed."
+            file --version
+            exit 0
+          fi
+
+          if command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends file
+
+          elif command -v dnf >/dev/null 2>&1; then
+            sudo dnf install -y file
+
+          elif command -v yum >/dev/null 2>&1; then
+            sudo yum install -y file
+
+          else
+            echo "ERROR: No supported package manager found."
+            exit 1
+          fi
+
+          echo "===== Verify installation ====="
+          file --version
           
       # Initialize CodeQL
       - name: Initialize CodeQL
