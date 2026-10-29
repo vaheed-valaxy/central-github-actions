@@ -36,14 +36,14 @@ jobs:
         with:
           go-version: "1.24"
 
-      - name: Create CodeQL configuration
-        run: |
-          cat > codeql-config.yml <<EOF
-          name: Go CodeQL
-          paths:
-            - ${{ inputs.service-name }}
-          EOF
-
+      # - name: Create CodeQL configuration
+      #   run: |
+      #     cat > codeql-config.yml <<EOF
+      #     name: Go CodeQL
+      #     paths:
+      #       - ${{ inputs.service-name }}
+      #     EOF
+          
       # Initialize CodeQL
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -51,7 +51,15 @@ jobs:
           languages: go
           queries: security-extended
           build-mode: manual
-          config-file: codeql-config.yml
+
+      # Initialize CodeQL
+      # - name: Initialize CodeQL
+      #   uses: github/codeql-action/init@v4
+      #   with:
+      #     languages: go
+      #     queries: security-extended
+      #     build-mode: manual
+      #     config-file: codeql-config.yml
 
       # Build GO Application automatically
       # - name: Autobuild 
