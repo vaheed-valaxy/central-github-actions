@@ -222,10 +222,16 @@ jobs:
           DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE_WITH_TAG" | awk -F@ '{print $2}')
 
           # DIGEST=$(aws ecr describe-images \
+          #   --region "${{ inputs.aws-region }}" \
           #   --repository-name "${{ inputs.ecr-repository }}" \
           #   --image-ids imageTag="${{ steps.meta.outputs.image_tag }}" \
           #   --query 'imageDetails[0].imageDigest' \
           #   --output text)
+
+          if [[ -z "$DIGEST" || "$DIGEST" == "None" ]]; then
+            echo "ERROR: Unable to retrieve the image digest from ECR."
+            exit 1
+          fi
 
           IMAGE_WITH_DIGEST="$IMAGE@$DIGEST"
 
