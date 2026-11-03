@@ -122,6 +122,7 @@ jobs:
           IMAGE_WITH_TAG="$IMAGE:$TAG"
 
           docker build \
+            --provenance=false \
             -t "$IMAGE_WITH_TAG" \
             -f "${{ inputs.dockerfile }}" \
             "${{ inputs.build-context }}"
