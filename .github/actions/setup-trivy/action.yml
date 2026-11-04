@@ -44,7 +44,7 @@ runs:
 
         mkdir -p "${INSTALL_DIR}"
 
-        echo "Installing Trivy version ${TRIVY_VERSION}"
+        echo "Installing Trivy version: ${TRIVY_VERSION}"
 
         echo "Downloading Trivy archive..."
 
