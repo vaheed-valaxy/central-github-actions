@@ -26,6 +26,12 @@ on:
         type: boolean
         default: false
 
+      trivy-version:
+        description: "Trivy Version"
+        required: false
+        type: string
+        default: "v0.72.0"
+
       trivy-fs-scan-path:
         description: "Path to scan"
         required: false
@@ -81,6 +87,7 @@ jobs:
     with:
       service-name: ${{ inputs.service-name }}
       runner: ${{ inputs.runner }}
+      trivy-version: ${{ inputs.trivy-version }}
       trivy-fs-scan-path: ${{ inputs.trivy-fs-scan-path }}
 
   Codeql-Analysis-Job:
