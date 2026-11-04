@@ -83,83 +83,83 @@ jobs:
       # Install Trivy
       # ======================================================
 
-      - name: Setup Trivy
-        uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241
-        with:
-          version: ${{ inputs.trivy-version }}
-          cache: true
+      # - name: Setup Trivy
+      #   uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241
+      #   with:
+      #     version: ${{ inputs.trivy-version }}
+      #     cache: true
 
       # ======================================================
       # Verify Trivy
       # ======================================================
 
-      - name: Verify Trivy Installation
-        run: |
-          echo "Trivy version:"
-          trivy --version
+      # - name: Verify Trivy Installation
+      #   run: |
+      #     echo "Trivy version:"
+      #     trivy --version
       
 
-      # - name: Install Trivy
-      #   shell: bash
-      #   env:
-      #     TRIVY_VERSION: ${{ inputs.trivy-version }}
-      #   run: |
-      #     set -euo pipefail
+      - name: Install Trivy
+        shell: bash
+        env:
+          TRIVY_VERSION: ${{ inputs.trivy-version }}
+        run: |
+          set -euo pipefail
 
-      #     VERSION="${TRIVY_VERSION#v}"
-      #     ARCHIVE="trivy_${VERSION}_Linux-64bit.tar.gz"
-      #     CHECKSUM_FILE="trivy_${VERSION}_checksums.txt"
+          VERSION="${TRIVY_VERSION#v}"
+          ARCHIVE="trivy_${VERSION}_Linux-64bit.tar.gz"
+          CHECKSUM_FILE="trivy_${VERSION}_checksums.txt"
 
-      #     DOWNLOAD_URL="https://github.com/aquasecurity/trivy/releases/download/v${VERSION}"
+          DOWNLOAD_URL="https://github.com/aquasecurity/trivy/releases/download/v${VERSION}"
 
-      #     TEMP_DIR="$(mktemp -d)"
-      #     INSTALL_DIR="${HOME}/.local/bin"
+          TEMP_DIR="$(mktemp -d)"
+          INSTALL_DIR="${HOME}/.local/bin"
 
-      #     trap 'rm -rf "${TEMP_DIR}"' EXIT
+          trap 'rm -rf "${TEMP_DIR}"' EXIT
 
-      #     mkdir -p "${INSTALL_DIR}"
+          mkdir -p "${INSTALL_DIR}"
 
-      #     echo "Downloading Trivy ${TRIVY_VERSION}"
+          echo "Downloading Trivy ${TRIVY_VERSION}"
 
-      #     curl --fail --location --silent --show-error \
-      #       --retry 3 \
-      #       --retry-delay 2 \
-      #       -o "${TEMP_DIR}/${ARCHIVE}" \
-      #       "${DOWNLOAD_URL}/${ARCHIVE}"
+          curl --fail --location --silent --show-error \
+            --retry 3 \
+            --retry-delay 2 \
+            -o "${TEMP_DIR}/${ARCHIVE}" \
+            "${DOWNLOAD_URL}/${ARCHIVE}"
 
-      #     echo "Downloading SHA256 checksums"
+          echo "Downloading SHA256 checksums"
 
-      #     curl --fail --location --silent --show-error \
-      #       --retry 3 \
-      #       --retry-delay 2 \
-      #       -o "${TEMP_DIR}/${CHECKSUM_FILE}" \
-      #       "${DOWNLOAD_URL}/${CHECKSUM_FILE}"
+          curl --fail --location --silent --show-error \
+            --retry 3 \
+            --retry-delay 2 \
+            -o "${TEMP_DIR}/${CHECKSUM_FILE}" \
+            "${DOWNLOAD_URL}/${CHECKSUM_FILE}"
 
-      #     echo "Verifying Trivy checksum"
+          echo "Verifying Trivy checksum"
 
-      #     CHECKSUM_LINE="$(awk -v file="${ARCHIVE}" '$2 == file || $2 == "*" file {print; exit}' "${TEMP_DIR}/${CHECKSUM_FILE}")"
+          CHECKSUM_LINE="$(awk -v file="${ARCHIVE}" '$2 == file || $2 == "*" file {print; exit}' "${TEMP_DIR}/${CHECKSUM_FILE}")"
 
-      #     if [ -z "${CHECKSUM_LINE}" ]; then
-      #       echo "ERROR: Trivy archive checksum not found"
-      #       exit 1
-      #     fi
+          if [ -z "${CHECKSUM_LINE}" ]; then
+            echo "ERROR: Trivy archive checksum not found"
+            exit 1
+          fi
 
-      #     printf '%s\n' "${CHECKSUM_LINE}" > "${TEMP_DIR}/checksum.txt"
+          printf '%s\n' "${CHECKSUM_LINE}" > "${TEMP_DIR}/checksum.txt"
 
-      #     cd "${TEMP_DIR}"
-      #     sha256sum --check checksum.txt
+          cd "${TEMP_DIR}"
+          sha256sum --check checksum.txt
 
-      #     echo "Extracting Trivy"
+          echo "Extracting Trivy"
 
-      #     tar -xzf "${ARCHIVE}"
+          tar -xzf "${ARCHIVE}"
 
-      #     install -m 0755 trivy "${INSTALL_DIR}/trivy"
+          install -m 0755 trivy "${INSTALL_DIR}/trivy"
 
-      #     echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
+          echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
 
-      #     echo "Trivy installation completed"
+          echo "Trivy installation completed"
 
-      #     trivy --version
+          trivy --version
 
       # ======================================================
       # Trivy FS Scan → JSON
