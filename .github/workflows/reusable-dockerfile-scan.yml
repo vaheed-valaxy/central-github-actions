@@ -31,7 +31,7 @@ on:
         type: boolean
         default: false
 
-      trivy-version:
+      trivy-dockerfile-scan-version:
         description: "Trivy Version"
         required: false
         type: string
@@ -108,7 +108,7 @@ jobs:
       - name: Setup Trivy
         uses: vaheed-valaxy/central-github-actions/.github/actions/setup-trivy@main
         with:
-          trivy-version: ${{ inputs.trivy-version }}
+          trivy-version: ${{ inputs.trivy-dockerfile-scan-version }}
         
       - name: Trivy Dockerfile Scan
         if: ${{ inputs.trivy-dockerfile-scan }}
