@@ -1,0 +1,77 @@
+name: Setup Trivy
+description: Install a pinned Trivy version and verify its SHA256 checksum
+
+runs:
+  using: composite
+  steps:
+    - name: Install Trivy
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # Change the Trivy version only in this central file.
+        TRIVY_VERSION="0.72.0"
+
+        ARCHIVE="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+        CHECKSUM_FILE="trivy_${TRIVY_VERSION}_checksums.txt"
+
+        DOWNLOAD_URL="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+
+        TEMP_DIR="$(mktemp -d)"
+        INSTALL_DIR="${HOME}/.local/bin"
+
+        trap 'rm -rf "${TEMP_DIR}"' EXIT
+
+        mkdir -p "${INSTALL_DIR}"
+
+        echo "Installing Trivy version ${TRIVY_VERSION}"
+
+        echo "Downloading Trivy archive..."
+
+        curl --fail --location --silent --show-error \
+          --retry 3 \
+          --retry-delay 2 \
+          -o "${TEMP_DIR}/${ARCHIVE}" \
+          "${DOWNLOAD_URL}/${ARCHIVE}"
+
+        echo "Downloading SHA256 checksums..."
+
+        curl --fail --location --silent --show-error \
+          --retry 3 \
+          --retry-delay 2 \
+          -o "${TEMP_DIR}/${CHECKSUM_FILE}" \
+          "${DOWNLOAD_URL}/${CHECKSUM_FILE}"
+
+        echo "Verifying SHA256 checksum..."
+
+        CHECKSUM_LINE="$(
+          awk -v file="${ARCHIVE}" \
+            '$2 == file || $2 == "*" file {print; exit}' \
+            "${TEMP_DIR}/${CHECKSUM_FILE}"
+        )"
+
+        if [ -z "${CHECKSUM_LINE}" ]; then
+          echo "ERROR: Trivy archive checksum not found"
+          exit 1
+        fi
+
+        printf '%s\n' "${CHECKSUM_LINE}" > "${TEMP_DIR}/checksum.txt"
+
+        cd "${TEMP_DIR}"
+        sha256sum --check checksum.txt
+
+        echo "Extracting Trivy..."
+
+        tar -xzf "${ARCHIVE}"
+
+        install -m 0755 trivy "${INSTALL_DIR}/trivy"
+
+        # Make Trivy available to all subsequent workflow steps.
+        echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
+
+        # Make it available in this step as well.
+        export PATH="${INSTALL_DIR}:${PATH}"
+
+        echo "Trivy installation completed successfully."
+
+        trivy --version
