@@ -83,21 +83,20 @@ jobs:
       # Install Trivy
       # ======================================================
 
-      - name: Setup Trivy
-        uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241
-        with:
-          version: ${{ inputs.trivy-version }}
-          cache: false
-          # cache: true
+      # - name: Setup Trivy
+      #   uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241
+      #   with:
+      #     version: ${{ inputs.trivy-version }}
+      #     cache: true
 
       # ======================================================
       # Verify Trivy
       # ======================================================
 
-      - name: Verify Trivy Installation
-        run: |
-          echo "Trivy version:"
-          trivy --version
+      # - name: Verify Trivy Installation
+      #   run: |
+      #     echo "Trivy version:"
+      #     trivy --version
 
       # ======================================================
       # Trivy FS Scan → JSON
@@ -107,8 +106,8 @@ jobs:
         # continue-on-error: true      
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          # version: ${{ inputs.trivy-version }} 
-          skip-setup-trivy: true
+          version: ${{ inputs.trivy-version }} 
+          # skip-setup-trivy: true
           scan-type: fs
           scan-ref: ${{ inputs.trivy-fs-scan-path}}
           format: json
@@ -116,7 +115,7 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           skip-files: ${{ inputs.trivy-fs-skip-files }}  # '**/README.md,**/LICENSE,**/docs/**'
-          exit-code: '0'
+          exit-code: 0
 
       # ======================================================
       # Verify JSON
