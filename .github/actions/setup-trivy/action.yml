@@ -17,6 +17,8 @@ runs:
       run: |
         set -euo pipefail
 
+        echo "Installing Trivy version: ${TRIVY_VERSION}"
+       
         # Change the Trivy version only in this central file.
         TRIVY_VERSION="${TRIVY_VERSION#v}"
 
