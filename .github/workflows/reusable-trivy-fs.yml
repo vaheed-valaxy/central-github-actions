@@ -67,10 +67,10 @@ jobs:
 
       - name: Verify Scan Path
         run: |
-          echo "---------------------------------------------- #
+          echo "# ---------------------------------------------- #"
           echo "Service: ${{ inputs.service-name }}"
           echo "Scan path: ${{ inputs.trivy-fs-scan-path }}"
-          echo "---------------------------------------------- #
+          echo "# ---------------------------------------------- #"
 
           if [ ! -d "${{ inputs.trivy-fs-scan-path }}" ]; then
             echo "ERROR: Scan path does not exist: ${{ inputs.trivy-fs-scan-path }}"
