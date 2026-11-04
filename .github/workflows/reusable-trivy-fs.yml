@@ -68,7 +68,7 @@ jobs:
       - name: Verify Scan Path
         run: |
           echo "# ---------------------------------------------- #"
-          echo "Service: ${{ inputs.service-name }}"
+          echo "Service  : ${{ inputs.service-name }}"
           echo "Scan path: ${{ inputs.trivy-fs-scan-path }}"
           echo "# ---------------------------------------------- #"
 
@@ -152,7 +152,7 @@ jobs:
       # ======================================================
 
       - name: Convert Trivy JSON to SARIF
-        if: always()
+        if: always() && hashFiles(format('trivy-fs-{0}.json', inputs.service-name)) != ''
         run: |
           trivy convert \
             --format sarif \
@@ -164,7 +164,7 @@ jobs:
       # ======================================================
 
       - name: Verify SARIF File
-        if: always()
+        if: always() && hashFiles(format('trivy-fs-{0}.sarif', inputs.service-name)) != ''
         run: |
           echo "Checking SARIF file..."
 
