@@ -3,9 +3,14 @@ description: Install a pinned Trivy version and verify its SHA256 checksum
 
 inputs:
   trivy-version:
-    description: Trivy version to install
+    description: "Trivy version to install"
     required: false
-    default: 'v0.72.0'
+    default: ""
+
+  trivy-default-version:
+    description: "Trivy default version"
+    required: false
+    default: "v0.72.0"
 
 runs:
   using: composite
@@ -14,11 +19,16 @@ runs:
       shell: bash
       env:
         TRIVY_VERSION: ${{ inputs.trivy-version }}
+        TRIVY_DEFAULT_VERSION: ${{ inputs.trivy-default-version }}
       run: |
         set -euo pipefail
 
-        echo "Installing Trivy version: ${TRIVY_VERSION}"
-       
+        if [[ -z "${TRIVY_VERSION:-}" ]]; then
+          TRIVY_VERSION="${TRIVY_DEFAULT_VERSION}"
+        fi
+
+        echo "Trivy version: ${TRIVY_VERSION}"
+
         # Change the Trivy version only in this central file.
         TRIVY_VERSION="${TRIVY_VERSION#v}"
 
