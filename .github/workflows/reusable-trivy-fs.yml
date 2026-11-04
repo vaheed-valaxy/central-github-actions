@@ -26,7 +26,7 @@ on:
         description: "Trivy version"
         required: false
         type: string
-        default: v0.76.0
+        default: v0.72.0
         
       trivy-fs-scan-path:
         description: "Path to scan"
@@ -97,6 +97,69 @@ jobs:
       #   run: |
       #     echo "Trivy version:"
       #     trivy --version
+      
+
+      - name: Install Trivy
+        shell: bash
+        env:
+          TRIVY_VERSION: ${{ inputs.trivy-version }}
+        run: |
+          set -euo pipefail
+
+          VERSION="${TRIVY_VERSION#v}"
+          ARCHIVE="trivy_${VERSION}_Linux-64bit.tar.gz"
+          CHECKSUM_FILE="trivy_${VERSION}_checksums.txt"
+
+          DOWNLOAD_URL="https://github.com/aquasecurity/trivy/releases/download/v${VERSION}"
+
+          TEMP_DIR="$(mktemp -d)"
+          INSTALL_DIR="${HOME}/.local/bin"
+
+          trap 'rm -rf "${TEMP_DIR}"' EXIT
+
+          mkdir -p "${INSTALL_DIR}"
+
+          echo "Downloading Trivy ${TRIVY_VERSION}"
+
+          curl --fail --location --silent --show-error \
+            --retry 3 \
+            --retry-delay 2 \
+            -o "${TEMP_DIR}/${ARCHIVE}" \
+            "${DOWNLOAD_URL}/${ARCHIVE}"
+
+          echo "Downloading SHA256 checksums"
+
+          curl --fail --location --silent --show-error \
+            --retry 3 \
+            --retry-delay 2 \
+            -o "${TEMP_DIR}/${CHECKSUM_FILE}" \
+            "${DOWNLOAD_URL}/${CHECKSUM_FILE}"
+
+          echo "Verifying Trivy checksum"
+
+          CHECKSUM_LINE="$(awk -v file="${ARCHIVE}" '$2 == file || $2 == "*" file {print; exit}' "${TEMP_DIR}/${CHECKSUM_FILE}")"
+
+          if [ -z "${CHECKSUM_LINE}" ]; then
+            echo "ERROR: Trivy archive checksum not found"
+            exit 1
+          fi
+
+          printf '%s\n' "${CHECKSUM_LINE}" > "${TEMP_DIR}/checksum.txt"
+
+          cd "${TEMP_DIR}"
+          sha256sum --check checksum.txt
+
+          echo "Extracting Trivy"
+
+          tar -xzf "${ARCHIVE}"
+
+          install -m 0755 trivy "${INSTALL_DIR}/trivy"
+
+          echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
+
+          echo "Trivy installation completed"
+
+          trivy --version
 
       # ======================================================
       # Trivy FS Scan → JSON
@@ -107,7 +170,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           version: ${{ inputs.trivy-version }} 
-          # skip-setup-trivy: true
+          skip-setup-trivy: true
           scan-type: fs
           scan-ref: ${{ inputs.trivy-fs-scan-path}}
           format: json
