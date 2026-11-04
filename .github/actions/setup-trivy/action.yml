@@ -1,16 +1,24 @@
 name: Setup Trivy
 description: Install a pinned Trivy version and verify its SHA256 checksum
 
+inputs:
+  version:
+    description: Trivy version to install
+    required: false
+    default: '0.72.0'
+
 runs:
   using: composite
   steps:
     - name: Install Trivy
       shell: bash
+      env:
+        TRIVY_VERSION: ${{ inputs.version }}
       run: |
         set -euo pipefail
 
         # Change the Trivy version only in this central file.
-        TRIVY_VERSION="0.72.0"
+        TRIVY_VERSION="${TRIVY_VERSION#v}"
 
         ARCHIVE="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
         CHECKSUM_FILE="trivy_${TRIVY_VERSION}_checksums.txt"
